@@ -113,6 +113,10 @@ export default function Voice() {
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
   const correctIdx = useMemo(() => (q ? Number(q.correct) : 0), [q]);
 
+  // 再挑戦回数（最大3トライ）
+  const MAX_TRIES = 3;
+  const [tries, setTries] = useState(0);
+
   // 進行
   const [phase, setPhase] = useState<"idle" | "countdown" | "answer" | "done">("idle");
   const [selected, setSelected] = useState<number | null>(null);
@@ -159,14 +163,24 @@ export default function Voice() {
     osc.stop(t + dur + 0.02);
   }
 
-  function startQuestion() {
+  function startQuestion(opts?: { retry?: boolean }) {
     if (!q) return;
-    setSelected(null);
-    setHeard("");
-    setNoResult(false);
-
-    speakJa(q.word);
-
+    
+    // 既存のタイマー/AudioContextをクリア
+    cleanupAudio();
+    if (opts?.retry) {
+      // リトライ：TTSは省略、回数を+1（上限MAX_TRIES）
+      setTries((t) => Math.min(t + 1, MAX_TRIES));
+      setNoResult(false);
+      setHeard("");
+    } else {
+      // 初回：状態リセット＋TTSあり、回数=1
+      setSelected(null);
+      setHeard("");
+      setNoResult(false);
+      setTries(1);
+      speakJa(q.word);
+    }
     const ac = new (window.AudioContext || (window as any).webkitAudioContext)();
     acRef.current = ac;
     const now = ac.currentTime + 0.25;
@@ -195,7 +209,8 @@ export default function Voice() {
         const text = e.results?.[0]?.[0]?.transcript || "";
         if (text) {
           setHeard(text);
-          decideByVoice(text); // 早期確定（SEも鳴る）
+          setNoResult(false);   // ← 聞き取れたのでフラグ解除
+          decideByVoice(text);  // 早期確定
         }
       };
       rec.onend = () => { };
@@ -328,7 +343,7 @@ export default function Voice() {
         </div>
 
         {phase === "idle" && (
-          <button onClick={startQuestion} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">
+          <button onClick={() => startQuestion()} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">
             この問題を開始
           </button>
         )}
@@ -342,9 +357,22 @@ export default function Voice() {
               </div>
             )}
             {noResult && (
-              <div className="mt-2 text-slate-300">
-                ※ うまく聞き取れませんでした。数字で「2番」や、選択肢の
-                <span className="underline">（ ）内の読み</span>を入れると通りやすいです。
+              <div className="mt-2 space-y-2">
+                <div className="text-slate-300">
+                  ※ うまく聞き取れませんでした。数字で「2番」や、選択肢の
+                  <span className="underline">（ ）内の読み</span>を入れると通りやすいです。
+                </div>
+                {tries < MAX_TRIES && (
+                  <button
+                    onClick={() => startQuestion({ retry: true })}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500"
+                  >
+                    音声で再挑戦（あと {MAX_TRIES - tries} 回）
+                  </button>
+                )}
+                <div className="text-slate-300">
+                  または、<b>選択肢を手動でタップ</b>してください。
+                </div>
               </div>
             )}
           </div>
