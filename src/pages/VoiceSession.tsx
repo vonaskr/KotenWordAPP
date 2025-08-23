@@ -6,25 +6,6 @@ import type { VocabItem } from "../types";
 import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings, topWrong } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
 
-let _confetti: any = null;
-async function fireConfetti(level = 1) {
-  try {
-    if (!_confetti) {
-      const mod = await import("canvas-confetti");
-      _confetti = mod.default || mod;
-    }
-    const count = Math.min(80 + level * 20, 200);
-    const spread = Math.min(50 + level * 10, 100);
-    _confetti({
-      particleCount: count,
-      spread,
-      startVelocity: 35 + level * 5,
-      scalar: 0.9,
-      origin: { y: 0.3 },
-    });
-  } catch { }
-}
-
 
 // ====== 読み上げ（TTS）
 function speakJa(text: string) {
@@ -111,15 +92,86 @@ function buzz(ctx: AudioContext, t: number, dur = 0.4) {
   o.stop(t + dur + 0.02);
 }
 
+// ---- 連続数に応じた紙吹雪（遅延ロード） ----
+let _confetti: any = null;
+
+async function fireConfettiTier(tier: 0|1|2|3) {
+  if (tier <= 0) return;
+  try {
+    if (!_confetti) {
+      const mod = await import("canvas-confetti");
+      _confetti = mod.default || mod;
+    }
+    // tierごとのパラメータ
+    const profile = [
+      { count: 0,  spread: 0,  vel: 0,  scalar: 1.0, ticks: 120 },
+      { count: 80, spread: 55, vel: 40, scalar: 0.9, ticks: 140 },
+      { count: 120,spread: 70, vel: 50, scalar: 0.95,ticks: 160 },
+      { count: 160,spread: 90, vel: 55, scalar: 1.0, ticks: 180 },
+    ][tier];
+
+    // メインバースト
+    _confetti({
+      particleCount: profile.count,
+      spread: profile.spread,
+      startVelocity: profile.vel,
+      scalar: profile.scalar,
+      ticks: profile.ticks,
+      origin: { x: 0.5, y: 0.3 },
+      //disableForReducedMotion: true,
+    });
+
+    // ちょいリッチ：tier2以上で左右から小バースト
+    if (tier >= 2) {
+      _confetti({
+        particleCount: Math.round(profile.count * 0.35),
+        spread: profile.spread - 10,
+        startVelocity: profile.vel - 10,
+        scalar: profile.scalar * 0.9,
+        ticks: profile.ticks - 20,
+        angle: 60,
+        origin: { x: 0.15, y: 0.4 },
+        disableForReducedMotion: true,
+      });
+      _confetti({
+        particleCount: Math.round(profile.count * 0.35),
+        spread: profile.spread - 10,
+        startVelocity: profile.vel - 10,
+        scalar: profile.scalar * 0.9,
+        ticks: profile.ticks - 20,
+        angle: 120,
+        origin: { x: 0.85, y: 0.4 },
+        disableForReducedMotion: true,
+      });
+    }
+  } catch { /* 失敗時は静かに無視 */ }
+}
+
 function playCorrectSE(ac?: AudioContext, streakLevel: number = 1) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
-  // 連続が伸びるほど音を豪華に（最大3音）
+
+  // ベースの2音
   tone(ctx, 880, t0, 0.12);
   tone(ctx, 1175, t0 + 0.16, 0.16);
-  if (streakLevel >= 3) tone(ctx, 1568, t0 + 0.32, 0.18); // 高音追加
-  if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 500);
+
+  // 3連続以上で高音を1つ
+  if (streakLevel >= 3) tone(ctx, 1568, t0 + 0.32, 0.18);
+
+  // 5連続以上で和音追加（軽く）
+  if (streakLevel >= 5) {
+    tone(ctx, 1319, t0 + 0.12, 0.12);
+    tone(ctx, 1760, t0 + 0.36, 0.16);
+  }
+
+  // 7連続以上でフィニッシュ小音
+  if (streakLevel >= 7) {
+    tone(ctx, 2093, t0 + 0.52, 0.12);
+  }
+
+  if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 700);
 }
+
 function playWrongSE(ac?: AudioContext) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
@@ -173,6 +225,20 @@ export default function VoiceSession() {
   const autoStartedRef = useRef(false); // 初回だけ自動開始
 
   const q = qp[qi];
+
+  // 初回マウント時に canvas-confetti を読み込んでおく（初回の遅延防止）
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!_confetti) {
+          const mod = await import("canvas-confetti");
+          _confetti = (mod as any).default || mod;
+        }
+      } catch {}
+    })();
+  }, []);
+
+
   useEffect(() => { qRef.current = q ?? null; }, [q]);
   const choices = useMemo(() => (q ? [q.choice1, q.choice2, q.choice3, q.choice4] : []), [q]);
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
@@ -459,7 +525,17 @@ export default function VoiceSession() {
       // ストック更新
       if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
       playCorrectSE(acRef.current || undefined, newStreak);
-      fireConfetti(Math.min(newStreak, 6));
+      // ストック更新
+      if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
+      playCorrectSE(acRef.current || undefined, newStreak);
+
+      // ★ 連続数に応じて祝福強度を段階化
+      const tier: 0|1|2|3 =
+        newStreak >= 7 ? 3 :
+        newStreak >= 5 ? 2 :
+        newStreak >= 3 ? 1 : 0;
+      fireConfettiTier(tier);
+
     } else {
       setStreak(0);
       addWrongId(id);
@@ -544,11 +620,20 @@ export default function VoiceSession() {
         <div>第 <b>{page}</b> / {total} 問</div>
         <div className="flex items-center gap-2">
           <span>スコア <b>{score}</b> ・ 連続 <b>{streak}</b> ・ 正解 {correctCount}</span>
-          {streak >= 2 && (
-            <span className="ml-1 px-2 py-0.5 rounded-full border border-amber-400 text-amber-200 bg-amber-500/10 animate-pulse">
-              COMBO ×{streak}
-            </span>
-          )}
+          {(() => {
+            const tier = streak >= 7 ? 3 : streak >= 5 ? 2 : streak >= 3 ? 1 : 0;
+            return (streak >= 2 && (
+              <span
+                className={[
+                  "ml-1 px-2 py-0.5 rounded-full border text-amber-100 bg-amber-500/10",
+                  tier >= 2 ? "border-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.35)]" : "border-amber-400",
+                  tier >= 3 ? "animate-bounce" : "animate-pulse",
+                ].join(" ")}
+              >
+                COMBO ×{streak}
+              </span>
+            ));
+          })()}
           <button onClick={() => setOpenSettings(true)} className="ml-2 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">⚙️ 設定</button>
           <button
             onClick={() => { if (confirm("途中で終了しますか？この時点までの結果でリザルトを表示します。")) quitNow(); }}
