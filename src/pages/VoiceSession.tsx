@@ -212,8 +212,9 @@ export default function VoiceSession() {
 
   // 回線と音声認識の可否
   const [isOnline, setIsOnline] = useState<boolean>(() => navigator.onLine);
-  const [srSupported, setSrSupported] = useState<boolean>(() =>
-    !!((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition)
+  const srSupported = useMemo(
+    () => !!((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition),
+    []
   );
   const voiceUsable = isOnline && srSupported; // これが false なら音声UIを出さない
 
