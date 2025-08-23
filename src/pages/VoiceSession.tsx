@@ -6,6 +6,26 @@ import type { VocabItem } from "../types";
 import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
 
+let _confetti: any = null;
+async function fireConfetti(level = 1) {
+  try {
+    if (!_confetti) {
+      const mod = await import("canvas-confetti");
+      _confetti = mod.default || mod;
+    }
+    const count = Math.min(80 + level * 20, 200);
+    const spread = Math.min(50 + level * 10, 100);
+    _confetti({
+      particleCount: count,
+      spread,
+      startVelocity: 35 + level * 5,
+      scalar: 0.9,
+      origin: { y: 0.3 },
+    });
+  } catch { }
+}
+
+
 // ====== 読み上げ（TTS）
 function speakJa(text: string) {
   try {
@@ -384,6 +404,7 @@ export default function VoiceSession() {
       // ストック更新
       if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
       playCorrectSE(acRef.current || undefined, newStreak);
+      fireConfetti(Math.min(newStreak, 6));
     } else {
       setStreak(0);
       addWrongId(id);
