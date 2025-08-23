@@ -262,6 +262,9 @@ export default function VoiceSession() {
     if (!curQ) return;
     cleanupAudio();
     stopRecognition(); // ← 取りこぼし防止
+    // ★ レース防止：参照される可能性がある ref を即クリア
+    selectedRef.current = null;
+    heardRef.current = "";
     if (opts?.retry) {
       setTries((t) => Math.min(t + 1, MAX_TRIES));
       setNoResult(false);
@@ -334,8 +337,10 @@ export default function VoiceSession() {
     }
   }
 
+
   function decideByVoice(raw?: string) {
-    if (!q || selected) return;
+    // ★ state は非同期反映なので ref を見る
+    if (!q || selectedRef.current != null) return;
 
     const t = normalizeJa(raw ?? heard);
     if (!t || t.length < 2) {
@@ -361,6 +366,7 @@ export default function VoiceSession() {
   function finalize(chosenIdx: number) {
     if (!q) return;
     setSelected(chosenIdx);
+    selectedRef.current = chosenIdx; // ★ 即座に“確定済み”を共有
     setPhase("done");
     stopRecognition();    // ← ここで確実に停止
 
