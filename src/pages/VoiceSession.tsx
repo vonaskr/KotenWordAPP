@@ -209,6 +209,22 @@ export default function VoiceSession() {
     }, ms);
   }
 
+  // phase が done になったら必ず自動送りを開始（設定ON時）
+  // done を抜けたら自動送りは止める（多重起動防止）
+  useEffect(() => {
+    if (phase === "done") {
+      if (conf.autoAdvance) {
+        startAutoNextTimer(conf.autoDelayMs);
+      } else {
+        cancelAutoNext();
+      }
+    } else {
+      // answer / idle / countdown / finished など
+      cancelAutoNext();
+    }
+  }, [phase, conf.autoAdvance, conf.autoDelayMs]);
+
+
   function cleanupAudio(delayMs = 0) {
     clearTimers();
     const ctx = acRef.current;
@@ -370,10 +386,7 @@ export default function VoiceSession() {
       setTimeout(() => setToast(null), 1200);
     }
     cleanupAudio(650);
-     // 自動で次へ（ONのときだけ）
-    if (conf.autoAdvance) {
-      startAutoNextTimer(conf.autoDelayMs);
-    }
+    setNoResult(false); // 判定確定後は再挑戦UIを消す
   }
 
   function next() {
