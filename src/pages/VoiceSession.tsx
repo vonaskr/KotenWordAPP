@@ -156,12 +156,20 @@ export default function VoiceSession() {
   const phaseRef = useRef<"loading" | "idle" | "countdown" | "answer" | "done" | "finished">("loading");
   const selectedRef = useRef<number | null>(null);
   const heardRef = useRef("");
+  const autoStartedRef = useRef(false); // 初回だけ自動開始
 
   const q = qp[qi];
   useEffect(() => { qRef.current = q ?? null; }, [q]);
   const choices = useMemo(() => (q ? [q.choice1, q.choice2, q.choice3, q.choice4] : []), [q]);
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
   const correctIdx = useMemo(() => (q ? Number(q.correct) : 0), [q]);
+  useEffect(() => {
+    if (phase === "idle" && q && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      setTimeout(() => startQuestion(), 120); // 少し遅らせてTTS/Audioの準備待ち
+    }
+  }, [phase, q]);
+
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
@@ -188,11 +196,13 @@ export default function VoiceSession() {
             if (wrongIds.has(makeItemId(it.word, it.reading))) pick.push(it);
           }
           const queue = pick.slice(0, N);
+          autoStartedRef.current = false; // ← ここで毎回リセット
           setQp(queue);
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
         } else {
           const queue = sampleWithoutReplacement(data, N);
+          autoStartedRef.current = false; // ← ここで毎回リセット
           setQp(queue);
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
