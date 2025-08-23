@@ -210,6 +210,13 @@ export default function VoiceSession() {
   const MAX_TRIES = 3;
   const [tries, setTries] = useState(0);
 
+  // 回線と音声認識の可否
+  const [isOnline, setIsOnline] = useState<boolean>(() => navigator.onLine);
+  const [srSupported, setSrSupported] = useState<boolean>(() =>
+    !!((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition)
+  );
+  const voiceUsable = isOnline && srSupported; // これが false なら音声UIを出さない
+
   const [sp] = useSearchParams();
   const mode = (sp.get("mode") as "all10" | "missed") || "all10";
   const nav = useNavigate();
@@ -250,6 +257,17 @@ export default function VoiceSession() {
     }
   }, [phase, q]);
 
+  // online offlineのイベントで状態更新
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
@@ -437,7 +455,7 @@ export default function VoiceSession() {
     );
 
     const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    if (SR) {
+    if (SR && voiceUsable) {
       const rec = new SR();
       rec.lang = "ja-JP";
       rec.interimResults = false;
@@ -449,6 +467,11 @@ export default function VoiceSession() {
           setHeard(text);
           setNoResult(false);
           decideByVoice(text); // 早期確定
+        }
+        else {
+          // 音声が使えないときは、答え時間だけ可視メッセージを出して手動回答へ誘導
+          // （phase は既に countdown→answer に遷移します）
+          setNoResult(false); // 「聞き取れませんでした」は出さない
         }
       };
       rec.onend = () => { };
@@ -620,6 +643,17 @@ export default function VoiceSession() {
         <div>第 <b>{page}</b> / {total} 問</div>
         <div className="flex items-center gap-2">
           <span>スコア <b>{score}</b> ・ 連続 <b>{streak}</b> ・ 正解 {correctCount}</span>
+          {!isOnline && (
+            <span className="ml-2 px-2 py-0.5 rounded-md bg-slate-700 border border-slate-500 text-xs">
+              オフライン（音声なし）
+            </span>
+          )}
+          {isOnline && !srSupported && (
+            <span className="ml-2 px-2 py-0.5 rounded-md bg-slate-700 border border-slate-500 text-xs">
+              この端末は音声認識に非対応
+            </span>
+          )}
+
           {(() => {
             const tier = streak >= 7 ? 3 : streak >= 5 ? 2 : streak >= 3 ? 1 : 0;
             return (streak >= 2 && (
@@ -684,6 +718,11 @@ export default function VoiceSession() {
           {phase === "answer" && (
             <div className="text-amber-300">
               GO！いま答えてください（約3秒）。
+              {!voiceUsable && (
+                <div className="mt-2 text-slate-300">
+                  ※ 現在 <b>音声回答は使えません</b>。下の<span className="underline">選択肢ボタン</span>をタップして答えてください。
+                </div>
+              )}
               {heard && (
                 <div className="mt-2 text-slate-200">
                   あなたの回答：<span className="font-semibold">「{heard}」</span>
@@ -695,7 +734,7 @@ export default function VoiceSession() {
                     ※ うまく聞き取れませんでした。数字で「2番」や、選択肢の
                     <span className="underline">（ ）内の読み</span>を入れると通りやすいです。
                   </div>
-                  {tries < MAX_TRIES && (
+                  {voiceUsable && tries < MAX_TRIES && (
                     <button onClick={() => startQuestion({ retry: true })} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500">
                       音声で再挑戦（あと {MAX_TRIES - tries} 回）
                     </button>
