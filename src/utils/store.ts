@@ -62,3 +62,25 @@ export function sampleWithoutReplacement<T>(arr: T[], n: number) {
   }
   return out;
 }
+
+// ---- 設定（出題数・自動移行） ----
+const K_SETTINGS = "kogoto.voiceSettings";
+export type VoiceSettings = { questionCount: 5 | 10; autoAdvance: boolean; autoDelayMs: number };
+
+export function getVoiceSettings(): VoiceSettings {
+  try {
+    const raw = localStorage.getItem(K_SETTINGS);
+    if (raw) {
+      const p = JSON.parse(raw) || {};
+      const q = [5, 10].includes(p.questionCount) ? p.questionCount : 10;
+      const adv = !!p.autoAdvance;
+      const delay = Number(p.autoDelayMs) || 3000;
+      return { questionCount: q, autoAdvance: adv, autoDelayMs: delay };
+    }
+  } catch {}
+  return { questionCount: 10, autoAdvance: false, autoDelayMs: 3000 };
+}
+
+export function saveVoiceSettings(s: VoiceSettings) {
+  localStorage.setItem(K_SETTINGS, JSON.stringify(s));
+}

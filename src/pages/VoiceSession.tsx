@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { loadVocab } from "../utils/loadVocab";
 import type { VocabItem } from "../types";
-import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement } from "../utils/store";
+import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings } from "../utils/store";
+import SettingsModal from "../components/SettingsModal";
 
 // ====== 読み上げ（TTS）
 function speakJa(text: string) {
@@ -78,13 +79,16 @@ function buzz(ctx: AudioContext, t: number, dur = 0.4) {
   o.start(t);
   o.stop(t + dur + 0.02);
 }
-function playCorrectSE(ac?: AudioContext) {
+
+function playCorrectSE(ac?: AudioContext, streakLevel: number = 1) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
-  tone(ctx, 880, t0, 0.12);
-  tone(ctx, 1175, t0 + 0.16, 0.16);
-  if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 500);
-}
+  // 連続が伸びるほど音を豪華に（最大3音）
+    tone(ctx, 880, t0, 0.12);
+    tone(ctx, 1175, t0 + 0.16, 0.16);
+    if (streakLevel >= 3) tone(ctx, 1568, t0 + 0.32, 0.18); // 高音追加
+    if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 500);
+  }
 function playWrongSE(ac?: AudioContext) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
@@ -109,6 +113,12 @@ export default function VoiceSession() {
   const [heard, setHeard] = useState("");
   const [supported, setSupported] = useState<boolean>(false);
   const [noResult, setNoResult] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [openSettings, setOpenSettings] = useState(false);
+  const [conf, setConf] = useState(getVoiceSettings());   // 設定（自動ON/OFF, 遅延ms）
+  const [autoProg, setAutoProg] = useState(0);            // 0..1 自動遷移 
+  const autoRaf = useRef<number | null>(null);
+  const autoTimeout = useRef<number | null>(null);
 
   // リトライ回数
   const MAX_TRIES = 3;
@@ -122,11 +132,14 @@ export default function VoiceSession() {
   const acRef = useRef<AudioContext | null>(null);
   const timers = useRef<number[]>([]);
   const recRef = useRef<any>(null);
+  
 
   const q = qp[qi];
   const choices = useMemo(() => (q ? [q.choice1, q.choice2, q.choice3, q.choice4] : []), [q]);
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
   const correctIdx = useMemo(() => (q ? Number(q.correct) : 0), [q]);
+
+  useEffect(() => { if (!openSettings) setConf(getVoiceSettings()); }, [openSettings]);
 
   useEffect(() => {
     (async () => {
@@ -136,19 +149,22 @@ export default function VoiceSession() {
         const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
         setSupported(!!SR);
 
-        // キューを構築
+
+        // キューを構築（設定の出題数を反映）
+        const conf = getVoiceSettings();
+        const N = conf.questionCount;
         if (mode === "missed") {
           const wrongIds = getWrongIds();
           const pick: VocabItem[] = [];
           for (const it of data) {
             if (wrongIds.has(makeItemId(it.word, it.reading))) pick.push(it);
           }
-          const queue = pick.slice(0, 10);
+          const queue = pick.slice(0, N);
           setQp(queue);
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
         } else {
-          const queue = sampleWithoutReplacement(data, 10);
+          const queue = sampleWithoutReplacement(data, N);
           setQp(queue);
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
@@ -164,6 +180,27 @@ export default function VoiceSession() {
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
   }
+  function cancelAutoNext() {
+    if (autoRaf.current) { cancelAnimationFrame(autoRaf.current); autoRaf.current = null; }
+    if (autoTimeout.current) { clearTimeout(autoTimeout.current); autoTimeout.current = null; }
+    setAutoProg(0);
+  }
+
+  function startAutoNextTimer(ms: number) {
+    cancelAutoNext();
+    const t0 = performance.now();
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - t0) / ms);
+      setAutoProg(p);
+      if (p < 1) autoRaf.current = requestAnimationFrame(tick);
+    };
+    autoRaf.current = requestAnimationFrame(tick);
+    autoTimeout.current = window.setTimeout(() => {
+      cancelAutoNext();
+      next();
+    }, ms);
+  }
+
   function cleanupAudio(delayMs = 0) {
     clearTimers();
     const ctx = acRef.current;
@@ -306,16 +343,23 @@ export default function VoiceSession() {
       setCorrectCount((c) => c + 1);
       // ストック更新
       if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
-      playCorrectSE(acRef.current || undefined);
+      playCorrectSE(acRef.current || undefined, newStreak);
     } else {
       setStreak(0);
       addWrongId(id);
       playWrongSE(acRef.current || undefined);
+      setToast("この問題を「間違えた問題」に登録しました");
+      setTimeout(() => setToast(null), 1200);
     }
     cleanupAudio(650);
+     // 自動で次へ（ONのときだけ）
+    if (conf.autoAdvance) {
+      startAutoNextTimer(conf.autoDelayMs);
+    }
   }
 
   function next() {
+    cancelAutoNext();
     if (qi + 1 >= qp.length) {
       // 結果へ
       nav("/voice/result", { state: { total: qp.length, correct: correctCount, score, maxStreak, mode } });
@@ -328,6 +372,26 @@ export default function VoiceSession() {
     setHeard("");
     setNoResult(false);
     setTries(0);
+    // 次の問題は自動で開始（ユーザー操作直後なので再生OK）
+    setTimeout(() => startQuestion(), 100);
+  }
+
+  // 途中でやめる：回答済み分で結果へ
+  function quitNow() {
+    cancelAutoNext();           // 自動遷移タイマー停止
+    cleanupAudio();             // 音声/タイマー停止
+    // 回答済み数：done中なら +1、それ以外は qi まで
+    const answered = phase === "done" ? qi + 1 : qi;
+    nav("/voice/result", {
+      state: {
+        total: answered,
+        correct: correctCount,
+        score,
+        maxStreak,
+        mode,
+      },
+    });
+    setPhase("finished");
   }
 
   useEffect(() => () => cleanupAudio(), []);
@@ -351,14 +415,28 @@ export default function VoiceSession() {
 
   return (
     <div className="w-full max-w-xl p-6">
-      <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
+    <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
         <div>第 <b>{page}</b> / {total} 問</div>
-        <div>スコア <b>{score}</b> ・ 連続 <b>{streak}</b> ・ 正解 {correctCount}</div>
-      </div>
+        <div className="flex items-center gap-2">
+          <span>スコア <b>{score}</b> ・ 連続 <b>{streak}</b> ・ 正解 {correctCount}</span>
+          {streak >= 2 && (
+            <span className="ml-1 px-2 py-0.5 rounded-full border border-amber-400 text-amber-200 bg-amber-500/10 animate-pulse">
+              COMBO ×{streak}
+            </span>
+          )}
+          <button onClick={() => setOpenSettings(true)} className="ml-2 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">⚙️ 設定</button>
+          <button
+            onClick={() => { if (confirm("途中で終了しますか？この時点までの結果でリザルトを表示します。")) quitNow(); }}
+            className="px-2 py-1 rounded bg-rose-700 hover:bg-rose-600"
+          >
+            やめる
+          </button>
+        </div>
+    </div>
 
       {q && (
         <div className="bg-slate-800 rounded-xl p-5 mb-5 border border-slate-700">
-          <div className="text-sm text-slate-400">{mode === "missed" ? "復習モード" : "10問モード"}</div>
+          <div className="text-sm text-slate-400">{mode === "missed" ? "復習モード" : "通常モード"}</div>
           <div className="text-3xl font-semibold my-2">{q.word}</div>
           {q.reading && <div className="text-slate-400 mb-4">（{q.reading}）</div>}
 
@@ -432,8 +510,29 @@ export default function VoiceSession() {
                 <div className="text-red-400 font-semibold">不正解… 正解は ({correctIdx}) です</div>
               )}
 
-              <div className="mt-4 flex gap-3">
-                <button onClick={next} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500">次へ</button>
+              <div className="mt-4 flex items-center gap-4">
+                <button onClick={() => { cancelAutoNext(); next(); }} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500">
+                  次へ
+                </button>
+                {conf.autoAdvance && (
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <svg width="44" height="44" viewBox="0 0 44 44" className="rotate-[-90deg]">
+                      {/* 背景リング */}
+                      <circle cx="22" cy="22" r="18" fill="none" className="stroke-slate-600" strokeWidth="6" />
+                      {/* 進捗リング */}
+                      {
+                        (() => {
+                          const R = 18;
+                          const C = 2 * Math.PI * R;
+                          const off = (1 - autoProg) * C;
+                          return <circle cx="22" cy="22" r={R} fill="none" strokeWidth="6" className="stroke-emerald-400"
+                            strokeDasharray={C} strokeDashoffset={off} strokeLinecap="round" />;
+                        })()
+                      }
+                    </svg>
+                    <span className="text-sm">自動で次へ… {Math.ceil((1 - autoProg) * (conf.autoDelayMs / 1000))} 秒</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -443,6 +542,13 @@ export default function VoiceSession() {
       <div className="text-xs text-slate-400">
         進捗：正解ストック <b>{c.correct}</b> / 間違いストック <b>{c.wrong}</b>
       </div>
+      <SettingsModal open={openSettings} onClose={() => setOpenSettings(false)} />
+        {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-100 border border-slate-700 px-3 py-2 rounded-lg shadow">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
+
