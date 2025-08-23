@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { counts, countReviewToday } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
 import { getVoiceSettings } from "../utils/store";
+import PrivacyBanner from "../components/PrivacyBanner";
 
 
 export default function VoiceHub() {
@@ -20,7 +21,23 @@ export default function VoiceHub() {
   return (
     <div className="w-full max-w-xl p-6">
       <h1 className="text-2xl font-bold mb-2">音声4択クイズ</h1>
+      <PrivacyBanner />
       <p className="text-slate-300 mb-2">モードを選んでください。</p>
+
+      <div className="mt-6 text-slate-400 text-xs">
+        <button
+          onClick={() => {
+            if (confirm("学習データ（正解/不正解/設定/統計）をすべて消去します。よろしいですか？")) {
+              localStorage.clear();
+              location.reload();
+            }
+          }}
+          className="underline"
+        >
+          学習データをすべて消去
+        </button>
+        （端末内保存）
+      </div>
       {rev > 0 && (
         <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-100">
           今日の復習：<b>{rev}</b> 件
