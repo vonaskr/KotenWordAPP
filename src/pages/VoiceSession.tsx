@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { loadVocab } from "../utils/loadVocab";
 import type { VocabItem } from "../types";
-import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings } from "../utils/store";
+import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings, topWrong } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
 
 let _confetti: any = null;
@@ -215,36 +215,37 @@ export default function VoiceSession() {
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
         } else {
-          // 通常モード：苦手注入（簡易）＋残りランダム
-          const queueCount = N; // N は直前で getVoiceSettings() から取得済み
+          // 通常モード：不正解回数の多い順に苦手注入＋残りランダム
+          const queueCount = N; // 直前で getVoiceSettings() から取得済み
           const wrongSet = getWrongIds();
 
-          // 「間違えストック」に入っている語を抽出（苦手候補）
-          const wrongPool: VocabItem[] = data.filter((it) =>
-            wrongSet.has(makeItemId(it.word, it.reading))
-          );
+          // 1) 不正解の多い順ランキングを取得（最大200件など十分に）
+          const ranked = topWrong(data, 200); // => [{id, word, reading, correct, wrong, total, acc}, ...]
 
-          // 何問注入する？（5問モードなら最大2問、10問モードなら最大3問）
+          // 2) 「今のCSVに存在」かつ「現在も wrong ストックに居るもの」に絞る
+          const rankedWrongIds = ranked
+            .map(r => makeItemId(r.word, r.reading))
+            .filter(id => wrongSet.has(id));
+
+          // 3) 注入数を決定（5問モードは最大2、10問モードは最大3）
           const injectMax = queueCount >= 10 ? 3 : 2;
-          const injectNum = Math.min(injectMax, wrongPool.length, queueCount);
+          const injectNum = Math.min(injectMax, rankedWrongIds.length, queueCount);
 
-          // 苦手候補から注入分をランダム抽出
-          const injected: VocabItem[] = injectNum > 0
-            ? sampleWithoutReplacement(wrongPool, injectNum)
-            : [];
+          // 4) 注入対象の VocabItem を取り出す（上位から injectNum 件）
+          const id2item = new Map(data.map(it => [makeItemId(it.word, it.reading), it]));
+          const injected: VocabItem[] = rankedWrongIds
+            .slice(0, injectNum)
+            .map(id => id2item.get(id)!)
+            .filter(Boolean);
 
-          // 重複を除いた残りプールを作る
-          const injectedIds = new Set(injected.map((it) => makeItemId(it.word, it.reading)));
-          const restPool: VocabItem[] = data.filter(
-            (it) => !injectedIds.has(makeItemId(it.word, it.reading))
-          );
-
-          // 残りをランダム抽出して合計 queueCount にそろえる
+          // 5) 残りは、注入した単語を除いてランダム抽出
+          const injectedIds = new Set(injected.map(it => makeItemId(it.word, it.reading)));
+          const restPool = data.filter(it => !injectedIds.has(makeItemId(it.word, it.reading)));
           const restNeed = Math.max(0, queueCount - injected.length);
           const rest = sampleWithoutReplacement(restPool, restNeed);
 
-          // 最後に全体を軽くシャッフルして出題順を決める
-          const queue = shuffle([...injected, ...rest]);
+          // 6) 出題順を軽くシャッフルして完成
+          const queue = shuffle([...injected, ...rest]); // shuffle は前段で追加済みのユーティリティ
 
           setQp(queue);
           setQi(0);
