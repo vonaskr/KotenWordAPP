@@ -132,11 +132,13 @@ export default function VoiceSession() {
   const acRef = useRef<AudioContext | null>(null);
   const timers = useRef<number[]>([]);
   const recRef = useRef<any>(null);
+  const qRef = useRef<VocabItem | null>(null);
   const phaseRef = useRef<"loading" | "idle" | "countdown" | "answer" | "done" | "finished">("loading");
   const selectedRef = useRef<number | null>(null);
   const heardRef = useRef("");
 
   const q = qp[qi];
+  useEffect(() => { qRef.current = q ?? null; }, [q]);
   const choices = useMemo(() => (q ? [q.choice1, q.choice2, q.choice3, q.choice4] : []), [q]);
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
   const correctIdx = useMemo(() => (q ? Number(q.correct) : 0), [q]);
@@ -240,7 +242,8 @@ export default function VoiceSession() {
 
   // 問題開始/リトライ
   function startQuestion(opts?: { retry?: boolean }) {
-    if (!q) return;
+    const curQ = qRef.current;
+    if (!curQ) return;
     cleanupAudio();
     stopRecognition(); // ← 取りこぼし防止
     if (opts?.retry) {
@@ -252,7 +255,8 @@ export default function VoiceSession() {
       setHeard("");
       setNoResult(false);
       setTries(1);
-      speakJa(q.word);
+      // 最新の問題文で読み上げ（古いクロージャ対策）
+      speakJa(curQ.word);
     }
 
     const ac = new (window.AudioContext || (window as any).webkitAudioContext)();
