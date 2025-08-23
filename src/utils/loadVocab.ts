@@ -40,6 +40,7 @@ export async function loadVocab(): Promise<VocabItem[]> {
       choice4: r.choice4 ?? "",
       correct: (r.correct as VocabItem["correct"]) ?? "1",
       aliases: r.aliases ?? "",
+      hint: r.hint?.trim() || undefined,   // ← 追加（任意列）
     }));
 }
   

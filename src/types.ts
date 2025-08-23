@@ -11,4 +11,5 @@ export type VocabItem = {
   choice4: string;
   correct: "1" | "2" | "3" | "4"; // 1..4 文字
   aliases?: string; // ";"区切り
+  hint?: string;   // 例文/シノニム
 };

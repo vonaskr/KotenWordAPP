@@ -134,6 +134,9 @@ export default function VoiceSession() {
   const [supported, setSupported] = useState<boolean>(false);
   const [noResult, setNoResult] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
+  const hintTimerRef = useRef<number | null>(null);
+
   const [openSettings, setOpenSettings] = useState(false);
   const [conf, setConf] = useState(getVoiceSettings());   // 設定（自動ON/OFF, 遅延ms）
   const [autoProg, setAutoProg] = useState(0);            // 0..1 自動遷移 
@@ -422,12 +425,19 @@ export default function VoiceSession() {
       setToast("この問題を「間違えた問題」に登録しました");
       setTimeout(() => setToast(null), 1200);
     }
+    // ヒント自動チラ見せ（邪魔しない程度に 1 秒後・自動送りがONでもOK）
+    const hasHint = !!q.hint?.trim();
+    if (hasHint) {
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = window.setTimeout(() => setShowHint(true), 1000);
+    }
     cleanupAudio(650);
     setNoResult(false); // 判定確定後は再挑戦UIを消す
   }
 
   function next() {
     cancelAutoNext();
+    setShowHint(false);
     if (qi + 1 >= qp.length) {
       // 結果へ
       nav("/voice/result", { state: { total: qp.length, correct: correctCount, score, maxStreak, mode } });
@@ -463,7 +473,10 @@ export default function VoiceSession() {
     setPhase("finished");
   }
 
-  useEffect(() => () => cleanupAudio(), []);
+  useEffect(() => () => {
+    cleanupAudio();
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+  }, []);
 
   if (err) return <div className="p-6 text-red-500">エラー：{err}</div>;
   if (phase === "finished" && qp.length === 0) return (
@@ -565,7 +578,20 @@ export default function VoiceSession() {
                   </div>
                 </div>
               )}
+              {/* ヒントトグル（任意表示） */}
+              {q.hint && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowHint((v) => !v)}
+                    className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 bg-slate-700/60 hover:bg-slate-600"
+                  >
+                    {showHint ? "ヒントを閉じる" : "ヒントを見る"}
+                  </button>
+                </div>
+              )}
+
             </div>
+            
           )}
           {phase === "done" && (
             <div className="mt-3">
@@ -609,8 +635,26 @@ export default function VoiceSession() {
                   </div>
                 )}
               </div>
+              {/* ヒントトグル（任意表示） */}
+              {q.hint && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowHint((v) => !v)}
+                    className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 bg-slate-700/60 hover:bg-slate-600"
+                  >
+                    {showHint ? "ヒントを閉じる" : "ヒントを見る"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
+          {showHint && q.hint && (
+            <div className="mt-3 p-3 rounded-lg border border-indigo-500/50 bg-indigo-900/20 text-indigo-200">
+              <div className="text-xs mb-1 opacity-80">ヒント</div>
+              <div className="leading-relaxed">{q.hint}</div>
+            </div>
+          )}
+
         </div>
       )}
 
