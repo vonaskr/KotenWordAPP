@@ -28,12 +28,14 @@ export function addCorrectId(id: string) {
   // 正解したら wrong からは除く
   const w = getWrongIds();
   if (w.delete(id)) saveSet(K_WRONG, w);
+  bumpStat(id, "correct");
 }
 
 export function addWrongId(id: string) {
   const w = getWrongIds();
   w.add(id);
   saveSet(K_WRONG, w);
+  bumpStat(id, "wrong");
 }
 
 export function moveWrongToCorrect(id: string) {
@@ -42,6 +44,7 @@ export function moveWrongToCorrect(id: string) {
   const c = getCorrectIds();
   c.add(id);
   saveSet(K_CORRECT, c);
+  bumpStat(id, "correct");
 }
 
 export function counts() {
@@ -84,3 +87,33 @@ export function getVoiceSettings(): VoiceSettings {
 export function saveVoiceSettings(s: VoiceSettings) {
   localStorage.setItem(K_SETTINGS, JSON.stringify(s));
 }
+// ---- 統計（累積の正解/不正解回数） ----
+const K_STATS = "kogoto.stats";
+export type Stat = { correct: number; wrong: number };
+export type StatsMap = Record<string, Stat>;
+
+function getStats(): StatsMap {
+  try { return JSON.parse(localStorage.getItem(K_STATS) || "{}") || {}; } catch { return {}; }
+}
+function saveStats(m: StatsMap) { localStorage.setItem(K_STATS, JSON.stringify(m)); }
+export function bumpStat(id: string, key: "correct"|"wrong") {
+  const m = getStats();
+  const cur = m[id] || { correct: 0, wrong: 0 };
+  cur[key] += 1;
+  m[id] = cur;
+  saveStats(m);
+}
+export function listStats(vocabs: Array<{word:string; reading?:string}>) {
+  const stats = getStats();
+  return vocabs.map(v => {
+    const id = makeItemId(v.word, v.reading);
+    const s = stats[id] || { correct: 0, wrong: 0 };
+    const total = s.correct + s.wrong;
+    const acc = total ? s.correct / total : 0;
+    return { id, word: v.word, reading: v.reading, ...s, total, acc };
+  });
+}
+export function topWrong(vocabs: any[], limit = 50) {
+  return listStats(vocabs).sort((a,b) => b.wrong - a.wrong).slice(0, limit);
+}
+export function resetStats() { localStorage.removeItem(K_STATS); }

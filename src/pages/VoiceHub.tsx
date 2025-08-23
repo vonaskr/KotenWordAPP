@@ -27,6 +27,9 @@ export default function VoiceHub() {
         <Link to="/voice/session?mode=missed" className="block bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-xl text-center">
           間違えた問題のみ出題
         </Link>
+        <Link to="/voice/stats" className="block bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-xl text-center">
+          間違えリスト & 統計
+        </Link>
       </div>
 
       <div className="mt-6 text-slate-400 text-sm">

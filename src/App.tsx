@@ -4,8 +4,9 @@ import Mood from "./pages/Mood";
 import VoiceHub from "./pages/VoiceHub";
 import VoiceSession from "./pages/VoiceSession";
 import VoiceResult from "./pages/VoiceResult";
-
+import VoiceStats from "./pages/VoiceStats";
 import Voice from "./pages/Voice";
+
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/voice" element={<VoiceHub />} />
           <Route path="/voice/session" element={<VoiceSession />} />
           <Route path="/voice/result" element={<VoiceResult />} />
+          <Route path="/voice/stats" element={<VoiceStats />} />
         </Routes>
       </main>
     </div>
