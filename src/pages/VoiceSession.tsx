@@ -132,12 +132,18 @@ export default function VoiceSession() {
   const acRef = useRef<AudioContext | null>(null);
   const timers = useRef<number[]>([]);
   const recRef = useRef<any>(null);
-  
+  const phaseRef = useRef<"loading" | "idle" | "countdown" | "answer" | "done" | "finished">("loading");
+  const selectedRef = useRef<number | null>(null);
+  const heardRef = useRef("");
 
   const q = qp[qi];
   const choices = useMemo(() => (q ? [q.choice1, q.choice2, q.choice3, q.choice4] : []), [q]);
   const tokensByChoice = useMemo(() => choices.map(choiceTokens), [choices]);
   const correctIdx = useMemo(() => (q ? Number(q.correct) : 0), [q]);
+
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => { heardRef.current = heard; }, [heard]);
 
   useEffect(() => { if (!openSettings) setConf(getVoiceSettings()); }, [openSettings]);
 
@@ -213,6 +219,11 @@ export default function VoiceSession() {
     }
   }
 
+  function stopRecognition() {
+    try { recRef.current?.stop(); } catch {}
+    recRef.current = null;
+  }
+
   // ビープ（リズム）
   function beepAt(ac: AudioContext, t: number, dur = 0.09) {
     const osc = ac.createOscillator();
@@ -231,6 +242,7 @@ export default function VoiceSession() {
   function startQuestion(opts?: { retry?: boolean }) {
     if (!q) return;
     cleanupAudio();
+    stopRecognition(); // ← 取りこぼし防止
     if (opts?.retry) {
       setTries((t) => Math.min(t + 1, MAX_TRIES));
       setNoResult(false);
@@ -269,7 +281,7 @@ export default function VoiceSession() {
       rec.onerror = () => { };
       rec.onresult = (e: any) => {
         const text = e.results?.[0]?.[0]?.transcript || "";
-        if (text) {
+         if (text && phaseRef.current === "answer") { // ← answer中のみ処理
           setHeard(text);
           setNoResult(false);
           decideByVoice(text); // 早期確定
@@ -287,14 +299,15 @@ export default function VoiceSession() {
       const ANSWER_MS = 3000;
       timers.current.push(
         window.setTimeout(() => {
-          try { rec.stop(); } catch { }
-          if (!selected) {
-            if (!heard) {
-              setNoResult(true);
-              setPhase("answer");
-            } else {
-              decideByVoice(heard);
-            }
+          stopRecognition(); // ← 確実に停止
+          // 既に done 等なら何もしない（古いタイマーの暴発防止）
+          if (phaseRef.current !== "answer") return;
+          if (selectedRef.current != null) return;
+          if (!heardRef.current) {
+            setNoResult(true);
+            setPhase("answer");
+          } else {
+            decideByVoice(heardRef.current);
           }
         }, Math.round((GO_OFFSET - ac.currentTime) * 1000) + ANSWER_MS)
       );
@@ -329,6 +342,7 @@ export default function VoiceSession() {
     if (!q) return;
     setSelected(chosenIdx);
     setPhase("done");
+    stopRecognition();    // ← ここで確実に停止
 
     const id = makeItemId(q.word, q.reading);
     const correct = chosenIdx === Number(q.correct);
@@ -378,8 +392,9 @@ export default function VoiceSession() {
 
   // 途中でやめる：回答済み分で結果へ
   function quitNow() {
-    cancelAutoNext();           // 自動遷移タイマー停止
-    cleanupAudio();             // 音声/タイマー停止
+    cancelAutoNext();
+    stopRecognition();
+    cleanupAudio();
     // 回答済み数：done中なら +1、それ以外は qi まで
     const answered = phase === "done" ? qi + 1 : qi;
     nav("/voice/result", {
