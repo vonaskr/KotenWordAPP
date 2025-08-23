@@ -5,7 +5,7 @@ import { loadVocab } from "../utils/loadVocab";
 import type { VocabItem } from "../types";
 import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings, topWrong } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
-
+import Crab from "../components/Crab";
 
 // ====== 読み上げ（TTS）
 function speakJa(text: string) {
@@ -233,6 +233,10 @@ export default function VoiceSession() {
   const autoStartedRef = useRef(false); // 初回だけ自動開始
 
   const q = qp[qi];
+
+  // カニ制御
+  const [crabTier, setCrabTier] = useState(0); // 0,1,2,3…
+  const [crabTrig, setCrabTrig] = useState<{type:'correct'|'wrong'|'levelUp'|null, key:number}>({type:null, key:0});
 
   // 初回マウント時に canvas-confetti を読み込んでおく（初回の遅延防止）
   useEffect(() => {
@@ -549,16 +553,17 @@ export default function VoiceSession() {
       // ストック更新
       if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
       playCorrectSE(acRef.current || undefined, newStreak);
-      // ストック更新
-      if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
-      playCorrectSE(acRef.current || undefined, newStreak);
 
-      // ★ 連続数に応じて祝福強度を段階化
-      const tier: 0|1|2|3 =
+      // カニ＆紙吹雪：共通の tier を一度だけ計算
+      const tierLevel: 0|1|2|3 =
         newStreak >= 7 ? 3 :
         newStreak >= 5 ? 2 :
         newStreak >= 3 ? 1 : 0;
-      fireConfettiTier(tier);
+
+      setCrabTier(tierLevel);
+      setCrabTrig((t) => ({ type: 'correct', key: t.key + 1 })); // ← + が抜けてた
+      fireConfettiTier(tierLevel);
+
 
     } else {
       setStreak(0);
@@ -566,6 +571,9 @@ export default function VoiceSession() {
       playWrongSE(acRef.current || undefined);
       setToast("この問題を「間違えた問題」に登録しました");
       setTimeout(() => setToast(null), 1200);
+      // カニ：不正解反応
+      setCrabTier(0);
+      setCrabTrig((t) => ({ type: 'wrong', key: t.key + 1 }));
     }
     // ヒント自動チラ見せ（邪魔しない程度に 1 秒後・自動送りがONでもOK）
     const hasHint = !!q.hint?.trim();
@@ -640,6 +648,15 @@ export default function VoiceSession() {
 
   return (
     <div className="w-full max-w-xl p-6">
+      {/* カニ（常時表示） */}
+      <div className="mb-2">
+        <Crab
+          walking={false}                    // ハブ画面で歩かせたい場合は true に
+          comboTier={crabTier}
+          trigger={crabTrig.type}
+          triggerKey={crabTrig.key}
+        />
+      </div>
       <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
         <div>第 <b>{page}</b> / {total} 問</div>
         <div className="flex items-center gap-2">

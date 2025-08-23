@@ -1,6 +1,6 @@
 // /src/pages/VoiceResult.tsx
 import { Link, useLocation } from "react-router-dom";
-
+import Crab from "../components/Crab";
 type ResultState = {
   total: number;
   correct: number;
@@ -23,6 +23,8 @@ export default function VoiceResult() {
 
   return (
     <div className="w-full max-w-xl p-6">
+      <Crab comboTier={Math.min(3, Math.floor(maxStreak/2))} />
+
       <h1 className="text-2xl font-bold mb-3">結果</h1>
       <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
         <div className="text-lg text-slate-200 mb-1">{title}</div>
