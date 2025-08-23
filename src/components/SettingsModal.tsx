@@ -37,7 +37,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           </div>
 
           <div>
-            <div className="text-slate-300 mb-2">自動で次へ（後で有効化）</div>
+            <div className="text-slate-300 mb-2">自動問題送り</div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.autoAdvance} onChange={(e) => setS({
                 ...s, autoAdvance: e.target.checked

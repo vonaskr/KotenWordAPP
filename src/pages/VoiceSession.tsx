@@ -84,11 +84,11 @@ function playCorrectSE(ac?: AudioContext, streakLevel: number = 1) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
   // 連続が伸びるほど音を豪華に（最大3音）
-    tone(ctx, 880, t0, 0.12);
-    tone(ctx, 1175, t0 + 0.16, 0.16);
-    if (streakLevel >= 3) tone(ctx, 1568, t0 + 0.32, 0.18); // 高音追加
-    if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 500);
-  }
+  tone(ctx, 880, t0, 0.12);
+  tone(ctx, 1175, t0 + 0.16, 0.16);
+  if (streakLevel >= 3) tone(ctx, 1568, t0 + 0.32, 0.18); // 高音追加
+  if (!ac) setTimeout(() => { try { ctx.close(); } catch { } }, 500);
+}
 function playWrongSE(ac?: AudioContext) {
   const ctx = ac ?? new (window.AudioContext || (window as any).webkitAudioContext)();
   const t0 = ctx.currentTime + 0.01;
@@ -238,7 +238,7 @@ export default function VoiceSession() {
   }
 
   function stopRecognition() {
-    try { recRef.current?.stop(); } catch {}
+    try { recRef.current?.stop(); } catch { }
     recRef.current = null;
   }
 
@@ -304,7 +304,7 @@ export default function VoiceSession() {
       rec.onerror = () => { };
       rec.onresult = (e: any) => {
         const text = e.results?.[0]?.[0]?.transcript || "";
-         if (text && phaseRef.current === "answer") { // ← answer中のみ処理
+        if (text && phaseRef.current === "answer") { // ← answer中のみ処理
           setHeard(text);
           setNoResult(false);
           decideByVoice(text); // 早期確定
@@ -449,11 +449,12 @@ export default function VoiceSession() {
 
   const total = qp.length;
   const page = qi + 1;
+  const isLast = page >= total && total > 0;
   const c = counts();
 
   return (
     <div className="w-full max-w-xl p-6">
-    <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
+      <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
         <div>第 <b>{page}</b> / {total} 問</div>
         <div className="flex items-center gap-2">
           <span>スコア <b>{score}</b> ・ 連続 <b>{streak}</b> ・ 正解 {correctCount}</span>
@@ -470,7 +471,7 @@ export default function VoiceSession() {
             やめる
           </button>
         </div>
-    </div>
+      </div>
 
       {q && (
         <div className="bg-slate-800 rounded-xl p-5 mb-5 border border-slate-700">
@@ -549,8 +550,11 @@ export default function VoiceSession() {
               )}
 
               <div className="mt-4 flex items-center gap-4">
-                <button onClick={() => { cancelAutoNext(); next(); }} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500">
-                  次へ
+                <button
+                  onClick={() => { cancelAutoNext(); next(); }}
+                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500"
+                >
+                  {isLast ? "結果を表示" : "次へ"}
                 </button>
                 {conf.autoAdvance && (
                   <div className="flex items-center gap-2 text-slate-300">
@@ -568,7 +572,9 @@ export default function VoiceSession() {
                         })()
                       }
                     </svg>
-                    <span className="text-sm">自動で次へ… {Math.ceil((1 - autoProg) * (conf.autoDelayMs / 1000))} 秒</span>
+                    <span className="text-sm">
+                      自動で{isLast ? "結果へ" : "次へ"}… {Math.ceil((1 - autoProg) * (conf.autoDelayMs / 1000))} 秒
+                    </span>
                   </div>
                 )}
               </div>
@@ -581,7 +587,7 @@ export default function VoiceSession() {
         進捗：正解ストック <b>{c.correct}</b> / 間違いストック <b>{c.wrong}</b>
       </div>
       <SettingsModal open={openSettings} onClose={() => setOpenSettings(false)} />
-        {toast && (
+      {toast && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-slate-100 border border-slate-700 px-3 py-2 rounded-lg shadow">
           {toast}
         </div>
