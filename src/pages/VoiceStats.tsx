@@ -8,6 +8,9 @@ export default function VoiceStats() {
   const [items, setItems] = useState<VocabItem[]>([]);
   const [rows, setRows] = useState<any[]>([]);
   const [tab, setTab] = useState<"wrong" | "all">("wrong");
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<"wrong"|"acc"|"total"|"correct">("wrong");
+  const [sortDir, setSortDir] = useState<"asc"|"desc">("desc");
 
   useEffect(() => {
     (async () => {
@@ -22,6 +25,34 @@ export default function VoiceStats() {
 
   useEffect(() => { tab === "all" ? loadAll() : loadWrong(); }, [tab, items]);
 
+  // 検索・並べ替えの適用
+  useEffect(() => {
+    // もとデータ（タブに応じて切替）
+    let base = tab === "all" ? listStats(items) : topWrong(items, 200);
+    // 検索（単語・読み）
+    const q = query.trim();
+    if (q) {
+      const lower = q.toLowerCase();
+      base = base.filter((r:any) =>
+        String(r.word||"").toLowerCase().includes(lower) ||
+        String(r.reading||"").toLowerCase().includes(lower)
+      );
+    }
+    // 並べ替え
+    base.sort((a:any,b:any) => {
+      const key = sortKey;
+      let av = a[key], bv = b[key];
+      // 正答率は tie-breaker に total を使って安定化
+      if (key === "acc") {
+        if (bv !== av) return (bv - av);
+        return (b.total - a.total);
+      }
+      return (bv - av);
+    });
+    if (sortDir === "asc") base.reverse();
+    setRows(base);
+  }, [items, tab, query, sortKey, sortDir]);
+
   return (
     <div className="w-full max-w-3xl p-6">
       <h1 className="text-2xl font-bold mb-3">間違えリスト & 統計</h1>
@@ -33,16 +64,62 @@ export default function VoiceStats() {
         <button onClick={() => { if (confirm("統計をリセットしますか？")) { resetStats(); loadWrong(); loadAll(); } }} className="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600">統計をリセット</button>
       </div>
 
+      {/* 検索・並べ替えツールバー */}
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          value={query}
+          onChange={(e)=>setQuery(e.target.value)}
+          placeholder="単語や読みで検索"
+          className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 w-60"
+        />
+        <div className="text-xs text-slate-400">
+          並べ替え：{sortKey}（{sortDir}）
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-slate-700">
+
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-800">
             <tr>
               <th className="px-3 py-2">単語</th>
               <th className="px-3 py-2">読み</th>
-              <th className="px-3 py-2 text-right">正解</th>
-              <th className="px-3 py-2 text-right">不正解</th>
-              <th className="px-3 py-2 text-right">計</th>
-              <th className="px-3 py-2 text-right">正答率</th>
+              <th className="px-3 py-2 text-right">
+                <button
+                  onClick={() => setSortKey(prev => (sortKey==="correct" && sortDir==="desc") ? (setSortDir("asc"), "correct") : (setSortDir("desc"), "correct"))}
+                  className="hover:underline"
+                  title="正解数で並べ替え"
+                >
+                  正解 {sortKey==="correct" ? (sortDir==="desc"?"↓":"↑") : ""}
+                </button>
+              </th>
+              <th className="px-3 py-2 text-right">
+                <button
+                  onClick={() => setSortKey(prev => (sortKey==="wrong" && sortDir==="desc") ? (setSortDir("asc"), "wrong") : (setSortDir("desc"), "wrong"))}
+                  className="hover:underline"
+                  title="不正解数で並べ替え"
+                >
+                  不正解 {sortKey==="wrong" ? (sortDir==="desc"?"↓":"↑") : ""}
+                </button>
+              </th>
+              <th className="px-3 py-2 text-right">
+                <button
+                  onClick={() => setSortKey(prev => (sortKey==="total" && sortDir==="desc") ? (setSortDir("asc"), "total") : (setSortDir("desc"), "total"))}
+                  className="hover:underline"
+                  title="出題回数で並べ替え"
+                >
+                  計 {sortKey==="total" ? (sortDir==="desc"?"↓":"↑") : ""}
+                </button>
+              </th>
+              <th className="px-3 py-2 text-right">
+                <button
+                  onClick={() => setSortKey(prev => (sortKey==="acc" && sortDir==="desc") ? (setSortDir("asc"), "acc") : (setSortDir("desc"), "acc"))}
+                  className="hover:underline"
+                  title="正答率で並べ替え"
+                >
+                  正答率 {sortKey==="acc" ? (sortDir==="desc"?"↓":"↑") : ""}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
