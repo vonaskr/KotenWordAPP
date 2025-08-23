@@ -180,7 +180,7 @@ function playWrongSE(ac?: AudioContext) {
 }
 
 export default function VoiceSession() {
-  const [items, setItems] = useState<VocabItem[]>([]);
+  //const [items, setItems] = useState<VocabItem[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [qp, setQp] = useState<VocabItem[]>([]); // queue
   const [qi, setQi] = useState(0);               // index
@@ -194,7 +194,7 @@ export default function VoiceSession() {
   const [phase, setPhase] = useState<"loading" | "idle" | "countdown" | "answer" | "done" | "finished">("loading");
   const [selected, setSelected] = useState<number | null>(null);
   const [heard, setHeard] = useState("");
-  const [supported, setSupported] = useState<boolean>(false);
+  //const [supported, setSupported] = useState<boolean>(false);
   const [noResult, setNoResult] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
@@ -261,9 +261,9 @@ export default function VoiceSession() {
     (async () => {
       try {
         const data = await loadVocab();
-        setItems(data);
-        const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-        setSupported(!!SR);
+        //setItems(data);
+        //const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+        //setSupported(!!SR);
 
 
         // キューを構築（設定の出題数を反映）

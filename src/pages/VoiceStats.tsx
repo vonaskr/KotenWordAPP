@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadVocab } from "../utils/loadVocab";
 import type { VocabItem } from "../types";
-import { listStats, topWrong, resetStats } from "../utils/store";
+import { listStats, resetStats } from "../utils/store";
 import { Link } from "react-router-dom";
 
 export default function VoiceStats() {
@@ -16,12 +16,13 @@ export default function VoiceStats() {
     (async () => {
       const data = await loadVocab();
       setItems(data);
-      setRows(topWrong(data, 200));
+      setRows(listStats(data).sort((a: any, b: any) => (b.wrong ?? 0) - (a.wrong ?? 0)));
+
     })();
   }, []);
 
-  function loadAll() { setRows(listStats(items).sort((a, b) => b.total - a.total)); }
-  function loadWrong() { setRows(topWrong(items, 200)); }
+  //function loadAll() { setRows(listStats(items).sort((a, b) => b.total - a.total)); }
+  //function loadWrong() { setRows(topWrong(items, 200)); }
 
   // 検索・フィルタ・並べ替えの適用（単一テーブル）
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function VoiceStats() {
               <th className="px-3 py-2">読み</th>
               <th className="px-3 py-2 text-right">
                 <button
-                  onClick={() => setSortKey(prev => (sortKey==="correct" && sortDir==="desc") ? (setSortDir("asc"), "correct") : (setSortDir("desc"), "correct"))}
+                  onClick={() => { setSortDir(sortKey==="correct" && sortDir==="desc" ? "asc" : "desc"); setSortKey("correct"); }}
                   className="hover:underline"
                   title="正解数で並べ替え"
                 >
@@ -105,7 +106,7 @@ export default function VoiceStats() {
               </th>
               <th className="px-3 py-2 text-right">
                 <button
-                  onClick={() => setSortKey(prev => (sortKey==="wrong" && sortDir==="desc") ? (setSortDir("asc"), "wrong") : (setSortDir("desc"), "wrong"))}
+                  onClick={() => { setSortDir(sortKey==="wrong" && sortDir==="desc" ? "asc" : "desc"); setSortKey("wrong"); }}
                   className="hover:underline"
                   title="不正解数で並べ替え"
                 >
@@ -114,7 +115,7 @@ export default function VoiceStats() {
               </th>
               <th className="px-3 py-2 text-right">
                 <button
-                  onClick={() => setSortKey(prev => (sortKey==="total" && sortDir==="desc") ? (setSortDir("asc"), "total") : (setSortDir("desc"), "total"))}
+                  onClick={() => { setSortDir(sortKey==="total" && sortDir==="desc" ? "asc" : "desc"); setSortKey("total"); }}
                   className="hover:underline"
                   title="出題回数で並べ替え"
                 >
@@ -123,7 +124,7 @@ export default function VoiceStats() {
               </th>
               <th className="px-3 py-2 text-right">
                 <button
-                  onClick={() => setSortKey(prev => (sortKey==="acc" && sortDir==="desc") ? (setSortDir("asc"), "acc") : (setSortDir("desc"), "acc"))}
+                  onClick={() => { setSortDir(sortKey==="acc" && sortDir==="desc" ? "asc" : "desc"); setSortKey("acc"); }}
                   className="hover:underline"
                   title="正答率で並べ替え"
                 >

@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(),
-         VitePWA({
+     VitePWA({
        registerType: 'autoUpdate',
        includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
        manifest: {
@@ -23,14 +23,14 @@ export default defineConfig({
        },
        workbox: {
          navigateFallback: 'index.html',
-         globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,webp,woff2}'],
+         globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,webp,woff2,csv}'],
          runtimeCaching: [
            {
              // サイト内の /vocab.csv をキャッシュ（最新も取りに行く）
-             urlPattern: ({url}) => url.origin === self.location.origin && url.pathname.endsWith('/vocab.csv'),
+             urlPattern: /\/vocab\.csv$/,
              handler: 'StaleWhileRevalidate',
              options: {
-               cacheName: 'vocab-cache',
+              cacheName: 'vocab-cache',
                expiration: { maxEntries: 3, maxAgeSeconds: 60 * 60 * 24 }
              }
            }

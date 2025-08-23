@@ -17,7 +17,7 @@ export default function VoiceResult() {
   const correct = s.correct ?? 0;
   const score = s.score ?? 0;
   const maxStreak = s.maxStreak ?? 0;
-  const mode = (s.mode as any) ?? "all10";
+  
   const ratio = total > 0 ? correct / total : 0;
   const title = ratio >= 0.9 ? "いとめでたし！" : ratio >= 0.6 ? "よきかな" : "むげなり";
 
