@@ -73,6 +73,17 @@ function wordToIndexJa(s: string): number | null {
   return null;
 }
 
+// ---- ユーティリティ：シャッフル（配列をランダム並べ替え）----
+function shuffle<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+
 // ====== SE（効果音）
 function tone(ctx: AudioContext, freq: number, t: number, dur = 0.12) {
   const o = ctx.createOscillator();
@@ -204,11 +215,41 @@ export default function VoiceSession() {
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
         } else {
-          const queue = sampleWithoutReplacement(data, N);
-          autoStartedRef.current = false; // ← ここで毎回リセット
+          // 通常モード：苦手注入（簡易）＋残りランダム
+          const queueCount = N; // N は直前で getVoiceSettings() から取得済み
+          const wrongSet = getWrongIds();
+
+          // 「間違えストック」に入っている語を抽出（苦手候補）
+          const wrongPool: VocabItem[] = data.filter((it) =>
+            wrongSet.has(makeItemId(it.word, it.reading))
+          );
+
+          // 何問注入する？（5問モードなら最大2問、10問モードなら最大3問）
+          const injectMax = queueCount >= 10 ? 3 : 2;
+          const injectNum = Math.min(injectMax, wrongPool.length, queueCount);
+
+          // 苦手候補から注入分をランダム抽出
+          const injected: VocabItem[] = injectNum > 0
+            ? sampleWithoutReplacement(wrongPool, injectNum)
+            : [];
+
+          // 重複を除いた残りプールを作る
+          const injectedIds = new Set(injected.map((it) => makeItemId(it.word, it.reading)));
+          const restPool: VocabItem[] = data.filter(
+            (it) => !injectedIds.has(makeItemId(it.word, it.reading))
+          );
+
+          // 残りをランダム抽出して合計 queueCount にそろえる
+          const restNeed = Math.max(0, queueCount - injected.length);
+          const rest = sampleWithoutReplacement(restPool, restNeed);
+
+          // 最後に全体を軽くシャッフルして出題順を決める
+          const queue = shuffle([...injected, ...rest]);
+
           setQp(queue);
           setQi(0);
           setPhase(queue.length ? "idle" : "finished");
+
         }
       } catch (e: any) {
         setErr(e?.message ?? "読み込みエラー");
