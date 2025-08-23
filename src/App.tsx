@@ -1,6 +1,10 @@
 import { Link, Route, Routes, NavLink } from "react-router-dom";
 import Home from "./pages/Home";
 import Mood from "./pages/Mood";
+import VoiceHub from "./pages/VoiceHub";
+import VoiceSession from "./pages/VoiceSession";
+import VoiceResult from "./pages/VoiceResult";
+
 import Voice from "./pages/Voice";
 
 export default function App() {
@@ -20,7 +24,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/mood" element={<Mood />} />
-          <Route path="/voice" element={<Voice />} />
+          <Route path="/voice" element={<VoiceHub />} />
+          <Route path="/voice/session" element={<VoiceSession />} />
+          <Route path="/voice/result" element={<VoiceResult />} />
         </Routes>
       </main>
     </div>
