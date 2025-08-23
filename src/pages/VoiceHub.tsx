@@ -1,22 +1,32 @@
 // /src/pages/VoiceHub.tsx
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { counts } from "../utils/store";
+import { counts, countReviewToday } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
 import { getVoiceSettings } from "../utils/store";
 
 
 export default function VoiceHub() {
   const [c, setC] = useState({ correct: 0, wrong: 0 });
+  const [rev, setRev] = useState(0);
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState(() => getVoiceSettings());
-  useEffect(() => { setC(counts()); }, []);
+  useEffect(() => {
+  setC(counts());
+  setRev(countReviewToday());
+  }, []);
   useEffect(() => { setSummary(getVoiceSettings()); }, [open]);
 
   return (
     <div className="w-full max-w-xl p-6">
       <h1 className="text-2xl font-bold mb-2">音声4択クイズ</h1>
-      <p className="text-slate-300 mb-6">モードを選んでください。</p>
+      <p className="text-slate-300 mb-2">モードを選んでください。</p>
+      {rev > 0 && (
+        <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-100">
+          今日の復習：<b>{rev}</b> 件
+          <Link to="/voice/session?mode=missed" className="ml-2 underline">今すぐ復習する</Link>
+        </div>
+      )}
       <button onClick={() => setOpen(true)} className="mb-4 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">
         ⚙️ 設定（問題数，自動送り）
       </button>
