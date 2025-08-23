@@ -5,7 +5,8 @@ import { loadVocab } from "../utils/loadVocab";
 import type { VocabItem } from "../types";
 import { addCorrectId, addWrongId, counts, getWrongIds, makeItemId, moveWrongToCorrect, sampleWithoutReplacement, getVoiceSettings, topWrong } from "../utils/store";
 import SettingsModal from "../components/SettingsModal";
-import Crab from "../components/Crab";
+//import Crab from "../components/Crab";
+import { addWallet } from "../utils/store";
 
 // ====== 読み上げ（TTS）
 function speakJa(text: string) {
@@ -235,9 +236,10 @@ export default function VoiceSession() {
   const q = qp[qi];
 
   // カニ制御
-  const [crabTier, setCrabTier] = useState(0); // 0,1,2,3…
-  const [crabTrig, setCrabTrig] = useState<{type:'correct'|'wrong'|'levelUp'|null, key:number}>({type:null, key:0});
+  //const [crabTier, setCrabTier] = useState(0); // 0,1,2,3…
+  //const [crabTrig, setCrabTrig] = useState<{type:'correct'|'wrong'|'levelUp'|null, key:number}>({type:null, key:0});
 
+  const [walletGain, setWalletGain] = useState(0);
   // 初回マウント時に canvas-confetti を読み込んでおく（初回の遅延防止）
   useEffect(() => {
     (async () => {
@@ -554,26 +556,23 @@ export default function VoiceSession() {
       if (mode === "missed") moveWrongToCorrect(id); else addCorrectId(id);
       playCorrectSE(acRef.current || undefined, newStreak);
 
-      // カニ＆紙吹雪：共通の tier を一度だけ計算
+      // ★ ウォレット加算（カニにはここでは付与しない）
+      const gain = 10 + Math.min(10, 2 * (newStreak - 1));
+      setWalletGain(g => g + gain);
+      addWallet(gain);
+
+      // ★ 紙吹雪（演出だけ残す）
       const tierLevel: 0|1|2|3 =
         newStreak >= 7 ? 3 :
         newStreak >= 5 ? 2 :
         newStreak >= 3 ? 1 : 0;
-
-      setCrabTier(tierLevel);
-      setCrabTrig((t) => ({ type: 'correct', key: t.key + 1 })); // ← + が抜けてた
       fireConfettiTier(tierLevel);
-
-
     } else {
       setStreak(0);
       addWrongId(id);
       playWrongSE(acRef.current || undefined);
       setToast("この問題を「間違えた問題」に登録しました");
       setTimeout(() => setToast(null), 1200);
-      // カニ：不正解反応
-      setCrabTier(0);
-      setCrabTrig((t) => ({ type: 'wrong', key: t.key + 1 }));
     }
     // ヒント自動チラ見せ（邪魔しない程度に 1 秒後・自動送りがONでもOK）
     const hasHint = !!q.hint?.trim();
@@ -590,7 +589,7 @@ export default function VoiceSession() {
     setShowHint(false);
     if (qi + 1 >= qp.length) {
       // 結果へ
-      nav("/voice/result", { state: { total: qp.length, correct: correctCount, score, maxStreak, mode } });
+      nav("/voice/result", { state: { total: qp.length, correct: correctCount, score, maxStreak, mode, walletGain } });
       setPhase("finished");
       return;
     }
@@ -612,13 +611,7 @@ export default function VoiceSession() {
     // 回答済み数：done中なら +1、それ以外は qi まで
     const answered = phase === "done" ? qi + 1 : qi;
     nav("/voice/result", {
-      state: {
-        total: answered,
-        correct: correctCount,
-        score,
-        maxStreak,
-        mode,
-      },
+      state: { total: answered, correct: correctCount, score, maxStreak, mode, walletGain },
     });
     setPhase("finished");
   }
@@ -648,15 +641,7 @@ export default function VoiceSession() {
 
   return (
     <div className="w-full max-w-xl p-6">
-      {/* カニ（常時表示） */}
-      <div className="mb-2">
-        <Crab
-          walking={false}                    // ハブ画面で歩かせたい場合は true に
-          comboTier={crabTier}
-          trigger={crabTrig.type}
-          triggerKey={crabTrig.key}
-        />
-      </div>
+      
       <div className="flex items-center justify-between mb-3 text-sm text-slate-300">
         <div>第 <b>{page}</b> / {total} 問</div>
         <div className="flex items-center gap-2">

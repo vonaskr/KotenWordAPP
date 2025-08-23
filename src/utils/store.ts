@@ -171,3 +171,72 @@ export function countReviewToday(): number {
   });
   return n;
 }
+// ===== ウォレット（クイズ報酬の一時貯蔵） ======================
+const WALLET_KEY = "wallet_v1";
+
+export function getWallet(): number {
+  return Number(localStorage.getItem(WALLET_KEY) || "0");
+}
+export function addWallet(delta: number): number {
+  const cur = getWallet();
+  const next = Math.max(0, cur + Math.floor(delta));
+  localStorage.setItem(WALLET_KEY, String(next));
+  try { window.dispatchEvent(new CustomEvent("wallet:update")); } catch {}
+  return next;
+}
+export function spendWallet(amount: number): { spent: number; rest: number } {
+  const cur = getWallet();
+  const spent = Math.max(0, Math.min(cur, Math.floor(amount)));
+  const rest = cur - spent;
+  localStorage.setItem(WALLET_KEY, String(rest));
+  try { window.dispatchEvent(new CustomEvent("wallet:update")); } catch {}
+  return { spent, rest };
+}
+
+// ===== 友好ポイント（カニ） =====================================
+const FRIEND_KEY = "friend_v1"; // 保存は total のみ
+
+function xpForLevel(level: number) {
+  // 0,300,900,1800,3000,...（ゆるやかに必要量が増える）
+  return Math.floor(300 * ((level - 1) * level) / 2);
+}
+function levelFromTotal(total: number) {
+  let lv = 1;
+  while (total >= xpForLevel(lv + 1)) lv++;
+  return lv;
+}
+
+export type FriendView = {
+  total: number;
+  level: number;
+  cur: number;
+  need: number;
+  progress: number; // 0..1
+};
+
+export function getFriend(): FriendView {
+  const total = Number(localStorage.getItem(FRIEND_KEY) || "0");
+  const level = levelFromTotal(total);
+  const base = xpForLevel(level);
+  const next = xpForLevel(level + 1);
+  const cur = total - base;
+  const need = next - base;
+  const progress = need > 0 ? cur / need : 1;
+  return { total, level, cur, need, progress };
+}
+
+export function addFriendPoints(delta: number): { view: FriendView; leveledUp: boolean; added: number } {
+  const beforeTotal = Number(localStorage.getItem(FRIEND_KEY) || "0");
+  const beforeLv = levelFromTotal(beforeTotal);
+  const afterTotal = Math.max(0, beforeTotal + Math.floor(delta));
+  localStorage.setItem(FRIEND_KEY, String(afterTotal));
+  const afterLv = levelFromTotal(afterTotal);
+  const view = getFriend();
+  try { window.dispatchEvent(new CustomEvent("friend:update")); } catch {}
+  return { view, leveledUp: afterLv > beforeLv, added: Math.floor(delta) };
+}
+
+export function resetFriend() {
+  localStorage.removeItem(FRIEND_KEY);
+  try { window.dispatchEvent(new CustomEvent("friend:update")); } catch {}
+}

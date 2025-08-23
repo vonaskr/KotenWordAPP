@@ -7,6 +7,7 @@ import VoiceSession from "./pages/VoiceSession";
 import VoiceResult from "./pages/VoiceResult";
 import VoiceStats from "./pages/VoiceStats";
 import { registerSW } from 'virtual:pwa-register'
+import CrabHub from "./pages/CrabHub";
 
 
 export default function App() {
@@ -41,6 +42,8 @@ export default function App() {
           <Route path="/voice/session" element={<VoiceSession />} />
           <Route path="/voice/result" element={<VoiceResult />} />
           <Route path="/voice/stats" element={<VoiceStats />} />
+          <Route path="/crab" element={<CrabHub />} />
+
         </Routes>
       </main>
 
