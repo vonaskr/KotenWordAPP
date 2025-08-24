@@ -31,14 +31,53 @@ export default function Crab({
   useEffect(() => { if (isWalking) isWalking.value = walking; }, [walking, isWalking]);
   useEffect(() => { if (tier) tier.value = comboTier; }, [comboTier, tier]);
 
+
   // 反応トリガー（親からの合図で一度だけ発火）
+  //  - rive/load直後の取りこぼしに備えて最大20回リトライ
+  //  - Trigger/Bool どちらでも発火
+  //  - どちらも無理なら「アニメ名」を直接再生（フォールバック）
   useEffect(() => {
-    if (!rive) return;
-    // Rive側で onLevelUp を使うなら、StateMachine Inputs に追加してここで fire してください
-    if (trigger === 'correct') onCorrect?.fire();
-    else if (trigger === 'wrong') onWrong?.fire();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerKey]); // key が変わるたびに実行
+    if (!rive || !trigger) return;
+    let cancelled = false;
+    let tries = 0;
+
+    const fireInput = (input: any) => {
+      if (!input) return false;
+      if (typeof input.fire === "function") {
+        input.fire();                      // Trigger
+        return true;
+      }
+      try {
+        input.value = true;                // Bool fallback
+        setTimeout(() => { try { input.value = false; } catch {} }, 80);
+        return true;
+      } catch { return false; }
+    };
+
+    const fallbackPlay = () => {
+      try {
+        const anim = trigger === "correct" ? "correct_small" : "wrong";
+        rive.reset();
+        rive.play(anim);
+        setTimeout(() => { try { rive.play("idle"); } catch {} }, 1000);
+      } catch {}
+    };
+
+    const attempt = () => {
+      if (cancelled || !rive) return;
+      const input = trigger === "correct" ? onCorrect : onWrong;
+      const ok = fireInput(input);
+      if (ok) return;
+      if (tries < 20) setTimeout(attempt, 50);
+      else fallbackPlay();
+    };
+
+    // 1tick遅らせてから開始（ロード直後対策）
+    requestAnimationFrame(() => setTimeout(attempt, 0));
+    return () => { cancelled = true; };
+  }, [rive, trigger, triggerKey, onCorrect, onWrong]);
+
+
 
   // デバッグ（コンソールから叩けるように）
   useEffect(() => {

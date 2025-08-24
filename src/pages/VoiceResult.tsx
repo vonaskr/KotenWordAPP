@@ -2,6 +2,8 @@
 import { Link, useLocation } from "react-router-dom";
 import Crab from "../components/Crab";
 import { getWallet } from "../utils/store";
+import { useState } from "react";
+
 
 type ResultState = {
   total: number;
@@ -15,12 +17,14 @@ type ResultState = {
 export default function VoiceResult() {
   const loc = useLocation();
   const s = (loc.state || {}) as Partial<ResultState>;
+  
+  const [fireKey] = useState(() => Date.now()); // 画面を開くたびに一意のキー
 
   const gain = Number(s.walletGain || 0);
   const total = Number(s.total || 0);
   const correct = Number(s.correct || 0);
   const acc = total > 0 ? correct / total : 0;
-  const trig: 'correct' | 'wrong' = acc >= 0.6 ? 'correct' : 'wrong';
+  //const trig: 'correct' | 'wrong' = acc >= 0.6 ? 'correct' : 'wrong';
 
   const score = s.score ?? 0;
   const maxStreak = s.maxStreak ?? 0;
@@ -38,11 +42,19 @@ export default function VoiceResult() {
         <div className="text-slate-400 text-sm">最大連続：{maxStreak}</div>
       </div>
       
+
+    {/*カニのリアクション（カードの外・ボタンの前） */}
+    {/* acc は正答率(0..1)想定 */}
+    <div className="my-4 flex justify-center">
+      console.log("[RESULT]", { total, correct, acc, trigger: acc >= 0.6 ? "correct" : "wrong", fireKey });
+
       <Crab
         comboTier={acc >= 0.9 ? 2 : acc >= 0.6 ? 1 : 0}
-        trigger={trig}
-        triggerKey={Date.now()}
+        trigger={acc >= 0.6 ? 'correct' : 'wrong'}
+        triggerKey={fireKey}   // useState(() => Date.now()) で作ったキー
       />
+    </div>
+
       <div className="mt-6 grid gap-3">
         <Link to="/voice/session?mode=all10" className="block text-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">もう一度 </Link>
         <Link to="/voice/session?mode=missed" className="block text-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500">間違いだけで復習</Link>
