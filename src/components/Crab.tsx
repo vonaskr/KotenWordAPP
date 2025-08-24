@@ -22,11 +22,10 @@ export default function Crab({
     autoplay: true,
     onLoad: () => console.log('[RIVE] loaded .riv / artboard / machine'),
   });
-
-  const onCorrect = useStateMachineInput(rive, 'CrabMachine', 'onCorrect');
-  const onWrong = useStateMachineInput(rive, 'CrabMachine', 'onWrong');
-  const isWalking = useStateMachineInput(rive, 'CrabMachine', 'isWalking');
-  const tier = useStateMachineInput(rive, 'CrabMachine', 'comboTier');
+ const onCorrect  = useStateMachineInput(rive, 'CrabMachine', 'onCorrect');
+  const onWrong    = useStateMachineInput(rive, 'CrabMachine', 'onWrong');
+  const isWalking  = useStateMachineInput(rive, 'CrabMachine', 'isWalking');
+  const tier       = useStateMachineInput(rive, 'CrabMachine', 'comboTier'); // Rive側に無ければ null
 
   // 外部状態を反映
   useEffect(() => { if (isWalking) isWalking.value = walking; }, [walking, isWalking]);

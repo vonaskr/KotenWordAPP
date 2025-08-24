@@ -192,6 +192,9 @@ export default function VoiceSession() {
   const [maxStreak, setMaxStreak] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
 
+  // 手動開始ボタンを出すか（デバッグ用）。本番は false 固定
+  const SHOW_MANUAL_START = false;
+
   const [phase, setPhase] = useState<"loading" | "idle" | "countdown" | "answer" | "done" | "finished">("loading");
   const [selected, setSelected] = useState<number | null>(null);
   const [heard, setHeard] = useState("");
@@ -714,10 +717,13 @@ export default function VoiceSession() {
             })}
           </div>
 
-          {phase === "idle" && (
-            <button onClick={() => startQuestion()} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">この問題を開始</button>
+          {SHOW_MANUAL_START && phase === "idle" && (
+            <button onClick={() => startQuestion()} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">
+              この問題を開始
+            </button>
           )}
           {phase === "countdown" && <div className="text-sky-300">カウントダウン中…（3→2→1→GO）</div>}
+          
           {phase === "answer" && (
             <div className="text-amber-300">
               GO！いま答えてください（約3秒）。
@@ -731,23 +737,8 @@ export default function VoiceSession() {
                   あなたの回答：<span className="font-semibold">「{heard}」</span>
                 </div>
               )}
-              {noResult && (
-                <div className="mt-2 space-y-2">
-                  <div className="text-slate-300">
-                    ※ うまく聞き取れませんでした。数字で「2番」や、選択肢の
-                    <span className="underline">（ ）内の読み</span>を入れると通りやすいです。
-                  </div>
-                  {voiceUsable && tries < MAX_TRIES && (
-                    <button onClick={() => startQuestion({ retry: true })} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500">
-                      音声で再挑戦（あと {MAX_TRIES - tries} 回）
-                    </button>
-                  )}
-                  <div className="text-slate-300">
-                    または、<b>選択肢を手動でタップ</b>してください。
-                  </div>
-                </div>
-              )}
-              {/* ヒントトグル（任意表示） */}
+
+              {/* ① ヒントボタン */}
               {q.hint && (
                 <div className="mt-3">
                   <button
@@ -759,11 +750,42 @@ export default function VoiceSession() {
                 </div>
               )}
 
+              {/* ② ヒント内容（← ここを answer ブロック内に移した） */}
+              {showHint && q.hint && (
+                <div className="mt-3 p-3 rounded-lg border border-indigo-500/50 bg-indigo-900/20 text-indigo-200">
+                  <div className="text-xs mb-1 opacity-80">ヒント</div>
+                  <div className="leading-relaxed">{q.hint}</div>
+                </div>
+              )}
+
+              {/* ③ noResult の再挑戦UI（最後に来る） */}
+              {noResult && (
+                <div className="mt-2 space-y-2">
+                  <div className="text-slate-300">
+                    ※ うまく聞き取れませんでした。数字で「2番」や、選択肢の
+                    <span className="underline">（ ）内の読み</span>を入れると通りやすいです。
+                  </div>
+                  {voiceUsable && tries < MAX_TRIES && (
+                    <button
+                      onClick={() => startQuestion({ retry: true })}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500"
+                    >
+                      音声で再挑戦（あと {MAX_TRIES - tries} 回）
+                    </button>
+                  )}
+                  <div className="text-slate-300">
+                    または、<b>選択肢を手動でタップ</b>してください。
+                  </div>
+                </div>
+              )}
             </div>
-            
           )}
+
+
           {phase === "done" && (
             <div className="mt-3">
+              
+
               {heard && (
                 <div className="mb-2 text-slate-200">
                   あなたの回答：<span className="font-semibold">「{heard}」</span>
@@ -804,25 +826,10 @@ export default function VoiceSession() {
                   </div>
                 )}
               </div>
-              {/* ヒントトグル（任意表示） */}
-              {q.hint && (
-                <div className="mt-3">
-                  <button
-                    onClick={() => setShowHint((v) => !v)}
-                    className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 bg-slate-700/60 hover:bg-slate-600"
-                  >
-                    {showHint ? "ヒントを閉じる" : "ヒントを見る"}
-                  </button>
-                </div>
-              )}
+              
             </div>
           )}
-          {showHint && q.hint && (
-            <div className="mt-3 p-3 rounded-lg border border-indigo-500/50 bg-indigo-900/20 text-indigo-200">
-              <div className="text-xs mb-1 opacity-80">ヒント</div>
-              <div className="leading-relaxed">{q.hint}</div>
-            </div>
-          )}
+
 
         </div>
       )}

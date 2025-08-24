@@ -20,13 +20,13 @@ export default function VoiceResult() {
   const total = Number(s.total || 0);
   const correct = Number(s.correct || 0);
   const acc = total > 0 ? correct / total : 0;
+  const trig: 'correct' | 'wrong' = acc >= 0.6 ? 'correct' : 'wrong';
 
   const score = s.score ?? 0;
   const maxStreak = s.maxStreak ?? 0;
   
   const ratio = total > 0 ? correct / total : 0;
   const title = ratio >= 0.9 ? "いとめでたし！" : ratio >= 0.6 ? "よきかな" : "むげなり";
-
   return (
     <div className="w-full max-w-xl p-6">
       {/* リアクション基準：90%以上 → 大喜び、60%以上 → 小喜び、それ未満 → しょんぼり */}
@@ -40,8 +40,8 @@ export default function VoiceResult() {
       
       <Crab
         comboTier={acc >= 0.9 ? 2 : acc >= 0.6 ? 1 : 0}
-        trigger={acc >= 0.6 ? 'correct' : 'wrong'}
-        triggerKey={total + correct} // 適当なノンス
+        trigger={trig}
+        triggerKey={Date.now()}
       />
       <div className="mt-6 grid gap-3">
         <Link to="/voice/session?mode=all10" className="block text-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">もう一度 </Link>
