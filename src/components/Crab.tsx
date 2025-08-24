@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useRive, useStateMachineInput } from "@rive-app/react-canvas";
+import { useRive } from "@rive-app/react-canvas";
 import crabFile from "../assets/crab.riv?url";
 
 type Props = {
@@ -17,7 +17,6 @@ export default function Crab({
   trigger = null,
   triggerKey = 0,
 }: Props) {
-  // 直近のトリガーを保持（onLoad直後に使う）
   const lastTriggerRef = useRef<{ t: Props["trigger"]; k: number }>({
     t: null,
     k: 0,
@@ -28,39 +27,44 @@ export default function Crab({
     src: crabFile,
     artboard: "Crab",
     stateMachines: "CrabMachine",
-    autoplay: true,
-    onLoad: () => {
-      // 読み込み直後に直近のトリガーを一度発火（取りこぼし防止）
-      try {
-        const t = lastTriggerRef.current.t;
-        if (t) queueMicrotask(() => fire(t));
-      } catch {}
-    },
+    autoplay: true, // State Machine を再生開始
   });
 
-  const onCorrect = useStateMachineInput(rive, "CrabMachine", "onCorrect");
-  const onWrong = useStateMachineInput(rive, "CrabMachine", "onWrong");
-  const isWalking = useStateMachineInput(rive, "CrabMachine", "isWalking");
-  const tier = useStateMachineInput(rive, "CrabMachine", "comboTier");
+  // ==== 最新の Input を毎回取り直す ====
+  function getInput(name: "onCorrect" | "onWrong" | "isWalking" | "comboTier") {
+    try {
+      const list = rive?.stateMachineInputs("CrabMachine") || [];
+      return list.find((i: any) => i?.name === name) ?? null;
+    } catch {
+      return null;
+    }
+  }
 
-  // 外部状態の反映
-  useEffect(() => {
-    if (isWalking) isWalking.value = walking;
-  }, [walking, isWalking]);
-  useEffect(() => {
-    if (tier) tier.value = comboTier;
-  }, [comboTier, tier]);
+  // ==== Inputs が現れるまで待つ（最大 waitMs）====
+  async function waitForInputs(waitMs = 4000) {
+    const start = performance.now();
+    return new Promise<boolean>((resolve) => {
+      const tick = () => {
+        const ok =
+          !!getInput("onCorrect") &&
+          !!getInput("onWrong"); // 必須2種が出たらOK
+        if (ok) return resolve(true);
+        if (performance.now() - start > waitMs) return resolve(false);
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  }
 
-  // Trigger/Bool どちらでも発火できる関数 + 最終手段の直接再生
+  // ==== Trigger/Bool どちらでも発火 ====
   function fireInput(input: any) {
     if (!input) return false;
     if (typeof input.fire === "function") {
-      input.fire(); // Trigger型
+      input.fire(); // Trigger
       return true;
     }
     try {
-      // Boolフォールバック
-      input.value = true;
+      input.value = true; // Bool fallback
       setTimeout(() => {
         try {
           input.value = false;
@@ -71,44 +75,82 @@ export default function Crab({
       return false;
     }
   }
-  function playFallback(which: "correct" | "wrong") {
+
+  // ==== 最終手段：State Machine を一時停止してアニメ直接再生 → idle → SM復帰 ====
+  function playTimelineDirect(which: "correct" | "wrong") {
     try {
       const anim = which === "correct" ? "correct_small" : "wrong";
+      // 1) SM 一時停止
+      try {
+        rive?.pause("CrabMachine");
+      } catch {}
+      // 2) タイムライン再生
       rive?.reset();
       rive?.play(anim);
+      // 3) 少し後に idle
       setTimeout(() => {
         try {
           rive?.play("idle");
         } catch {}
+      }, 900);
+      // 4) 最後に SM 復帰
+      setTimeout(() => {
+        try {
+          rive?.play("CrabMachine");
+        } catch {}
       }, 1000);
     } catch {}
   }
+
+  // ==== 反応本体 ====
   function fire(which: "correct" | "wrong") {
-    const ok = fireInput(which === "correct" ? onCorrect : onWrong);
-    if (!ok) playFallback(which);
+    const input = getInput(which === "correct" ? "onCorrect" : "onWrong");
+    const ok = fireInput(input);
+    // 取りこぼし保険：少し遅らせて直接再生
+    setTimeout(() => playTimelineDirect(which), ok ? 80 : 0);
+    if (!ok) playTimelineDirect(which);
   }
 
-  // propsの変化/キーの変化で必ず発火（ロード直後対策にリトライあり）
+  // ==== 外部状態（歩行・ティア）反映 ====
   useEffect(() => {
-    if (!rive || !trigger) return;
-    let tries = 0,
-      canceled = false;
+    const inp = getInput("isWalking");
+    if (inp) {
+      try {
+        inp.value = !!walking;
+      } catch {}
+    }
+  }, [walking, rive]);
 
-    const attempt = () => {
+  useEffect(() => {
+    const inp = getInput("comboTier");
+    if (inp) {
+      try {
+        inp.value = Number(comboTier) || 0;
+      } catch {}
+    }
+  }, [comboTier, rive]);
+
+  // ==== 結果画面マウント時に必ず一度発火（Inputs を待ってから） ====
+  useEffect(() => {
+    let canceled = false;
+    (async () => {
+      if (!rive || !trigger) return;
+      // Inputsが現れるまで待つ
+      const ok = await waitForInputs(4000);
+      console.log("[CRAB ready?]", ok, {
+        hasOnCorrect: !!getInput("onCorrect"),
+        hasOnWrong: !!getInput("onWrong"),
+      });
       if (canceled) return;
-      const ok = fireInput(trigger === "correct" ? onCorrect : onWrong);
-      if (ok) return;
-      if (tries++ < 20) setTimeout(attempt, 50);
-      else playFallback(trigger);
-    };
-
-    requestAnimationFrame(() => setTimeout(attempt, 0));
+      fire(trigger);
+    })();
     return () => {
       canceled = true;
     };
-  }, [rive, trigger, triggerKey, onCorrect, onWrong]);
+    // triggerKey を依存に含める：画面を開き直したとき毎回反応
+  }, [rive, trigger, triggerKey]);
 
-  // デバッグ：利用可能な入力名をログ
+  // デバッグ：Input名のログ（ロード後に一度出る）
   useEffect(() => {
     if (!rive) return;
     try {
@@ -117,27 +159,27 @@ export default function Crab({
     } catch {}
   }, [rive]);
 
-  // コンソール操作用
+  // コンソール操作用（あなたの手動確認用）
   useEffect(() => {
     (window as any).crab = {
       correct: () => fire("correct"),
       wrong: () => fire("wrong"),
       walk: (v: boolean) => {
-        if (isWalking) isWalking.value = v;
+        const i = getInput("isWalking");
+        if (i) i.value = v;
       },
       tier: (v: number) => {
-        if (tier) tier.value = v;
+        const i = getInput("comboTier");
+        if (i) i.value = v;
       },
     };
-  }, [onCorrect, onWrong, isWalking, tier]);
+  }, [rive]);
 
   return (
     <div className="mx-auto w-full max-w-[340px]">
       <RiveComponent className="w-full h-[240px] border border-slate-600 rounded-md bg-slate-900/40 select-none pointer-events-none" />
       <div className="mt-1 text-xs text-slate-400 text-center">
-        {rive ? "Rive OK" : "Loading..."} / inputs:{" "}
-        {String(!!onCorrect)} {String(!!onWrong)} {String(!!isWalking)}{" "}
-        {String(!!tier)}
+        {rive ? "Rive OK" : "Loading..."}
       </div>
     </div>
   );
