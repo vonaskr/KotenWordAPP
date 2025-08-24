@@ -29,14 +29,7 @@ export default function VoiceResult() {
 
   return (
     <div className="w-full max-w-xl p-6">
-      <Crab comboTier={Math.min(3, Math.floor(maxStreak/2))} />
       {/* リアクション基準：90%以上 → 大喜び、60%以上 → 小喜び、それ未満 → しょんぼり */}
-      <Crab
-        comboTier={acc >= 0.9 ? 2 : acc >= 0.6 ? 1 : 0}
-        trigger={acc >= 0.6 ? 'correct' : 'wrong'}
-        triggerKey={total + correct} // 適当なノンス
-      />
-
       <h1 className="text-2xl font-bold mb-3">結果</h1>
       <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
         <div className="text-lg text-slate-200 mb-1">{title}</div>
@@ -44,7 +37,12 @@ export default function VoiceResult() {
         <div className="text-slate-200 mb-1">正答数：{correct} / {total}</div>
         <div className="text-slate-400 text-sm">最大連続：{maxStreak}</div>
       </div>
-
+      
+      <Crab
+        comboTier={acc >= 0.9 ? 2 : acc >= 0.6 ? 1 : 0}
+        trigger={acc >= 0.6 ? 'correct' : 'wrong'}
+        triggerKey={total + correct} // 適当なノンス
+      />
       <div className="mt-6 grid gap-3">
         <Link to="/voice/session?mode=all10" className="block text-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500">もう一度 </Link>
         <Link to="/voice/session?mode=missed" className="block text-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500">間違いだけで復習</Link>

@@ -30,6 +30,7 @@ export default function App() {
           <nav className="text-sm flex gap-3">
             <NavLink to="/mood" className={({isActive})=>isActive?"text-emerald-400":"text-slate-300 hover:text-white"}>表情ネガポジ</NavLink>
             <NavLink to="/voice" className={({isActive})=>isActive?"text-emerald-400":"text-slate-300 hover:text-white"}>音声4択</NavLink>
+            <NavLink to="/crab" className={({isActive})=>isActive?"text-emerald-400":"text-slate-300 hover:text-white"}>カニと遊ぶ</NavLink>
           </nav>
         </div>
       </header>
