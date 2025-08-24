@@ -1,14 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useRive } from "@rive-app/react-canvas";
 import crabFile from "../assets/crab.riv?url";
 
 type Props = {
   walking?: boolean;
-  comboTier?: number;
-  /** 正答なら "correct"、誤答なら "wrong"。null で何もしない */
+  comboTier?: number; // 0=弱, 1=中, 2=強
   trigger?: "correct" | "wrong" | null;
-  /** 値が変わるたびに反応させるためのノンス（結果画面を開くたびにユニークでOK） */
-  triggerKey?: number;
+  triggerKey?: number; // 変化時に必ずリアクション
 };
 
 export default function Crab({
@@ -17,20 +15,14 @@ export default function Crab({
   trigger = null,
   triggerKey = 0,
 }: Props) {
-  const lastTriggerRef = useRef<{ t: Props["trigger"]; k: number }>({
-    t: null,
-    k: 0,
-  });
-  lastTriggerRef.current = { t: trigger, k: triggerKey };
-
   const { rive, RiveComponent } = useRive({
     src: crabFile,
     artboard: "Crab",
     stateMachines: "CrabMachine",
-    autoplay: true, // State Machine を再生開始
+    autoplay: true,
   });
 
-  // ==== 最新の Input を毎回取り直す ====
+  // --- 最新の SM 入力を毎回名前で取得 ---
   function getInput(name: "onCorrect" | "onWrong" | "isWalking" | "comboTier") {
     try {
       const list = rive?.stateMachineInputs("CrabMachine") || [];
@@ -40,35 +32,40 @@ export default function Crab({
     }
   }
 
-  // ==== Inputs が現れるまで待つ（最大 waitMs）====
+  // --- 入力が現れるまで最大 waitMs 待機 ---
   async function waitForInputs(waitMs = 4000) {
-    const start = performance.now();
+    const t0 = performance.now();
     return new Promise<boolean>((resolve) => {
       const tick = () => {
-        const ok =
-          !!getInput("onCorrect") &&
-          !!getInput("onWrong"); // 必須2種が出たらOK
+        const ok = !!getInput("onCorrect") && !!getInput("onWrong");
         if (ok) return resolve(true);
-        if (performance.now() - start > waitMs) return resolve(false);
+        if (performance.now() - t0 > waitMs) return resolve(false);
         setTimeout(tick, 50);
       };
       tick();
     });
   }
 
-  // ==== Trigger/Bool どちらでも発火 ====
-  function fireInput(input: any) {
+  // --- Trigger/Bool どちらでも一度だけ発火。成功しなければ false ---
+  function fireSM(which: "correct" | "wrong"): boolean {
+    const input = getInput(which === "correct" ? "onCorrect" : "onWrong");
     if (!input) return false;
-    if (typeof input.fire === "function") {
-      input.fire(); // Trigger
-      return true;
+    // Trigger 型優先
+    if (typeof (input as any).fire === "function") {
+      try {
+        (input as any).fire();
+        return true;
+      } catch {
+        /* fallthrough */
+      }
     }
+    // Bool フォールバック
     try {
-      input.value = true; // Bool fallback
+      (input as any).value = true;
       setTimeout(() => {
         try {
-          input.value = false;
-        } catch {}
+          (input as any).value = false;
+        } catch { }
       }, 80);
       return true;
     } catch {
@@ -76,101 +73,116 @@ export default function Crab({
     }
   }
 
-  // ==== 最終手段：State Machine を一時停止してアニメ直接再生 → idle → SM復帰 ====
+  // --- 最終手段：SM を一時停止し、タイムライン名で直接再生して idle に戻す ---
   function playTimelineDirect(which: "correct" | "wrong") {
     try {
       const anim = which === "correct" ? "correct_small" : "wrong";
-      // 1) SM 一時停止
       try {
         rive?.pause("CrabMachine");
-      } catch {}
-      // 2) タイムライン再生
+      } catch { }
       rive?.reset();
       rive?.play(anim);
-      // 3) 少し後に idle
       setTimeout(() => {
         try {
           rive?.play("idle");
-        } catch {}
+        } catch { }
       }, 900);
-      // 4) 最後に SM 復帰
       setTimeout(() => {
         try {
           rive?.play("CrabMachine");
-        } catch {}
+        } catch { }
       }, 1000);
-    } catch {}
+    } catch { }
   }
 
-  // ==== 反応本体 ====
-  function fire(which: "correct" | "wrong") {
-    const input = getInput(which === "correct" ? "onCorrect" : "onWrong");
-    const ok = fireInput(input);
-    // 取りこぼし保険：少し遅らせて直接再生
-    setTimeout(() => playTimelineDirect(which), ok ? 80 : 0);
+  // --- “一回分”の発火（SMが効けばSMのみ。失敗した時だけ直再生） ---
+  function fireOnce(which: "correct" | "wrong") {
+    const ok = fireSM(which);
     if (!ok) playTimelineDirect(which);
   }
 
-  // ==== 外部状態（歩行・ティア）反映 ====
+  // --- 自然に見えるスケジュールで何回か繰り返す ---
+  function scheduleReaction(which: "correct" | "wrong", opts?: { firstDelay?: number; repeats?: number; gap?: number }) {
+    const firstDelay = opts?.firstDelay ?? 500; // 初回までの“間”
+    const repeats = Math.max(1, Math.min(4, opts?.repeats ?? 1));
+    const gap = opts?.gap ?? 650; // 2発目以降のインターバル
+
+    // 1発目
+    setTimeout(() => fireOnce(which), firstDelay);
+    // 2発目以降
+    for (let i = 1; i < repeats; i++) {
+      setTimeout(() => fireOnce(which), firstDelay + i * gap);
+    }
+  }
+
+  // --- 外部状態の反映（歩行／ティア）。無理のない範囲で更新 ---
   useEffect(() => {
-    const inp = getInput("isWalking");
-    if (inp) {
+    const i = getInput("isWalking");
+    if (i) {
       try {
-        inp.value = !!walking;
-      } catch {}
+        (i as any).value = !!walking;
+      } catch { }
     }
   }, [walking, rive]);
 
   useEffect(() => {
-    const inp = getInput("comboTier");
-    if (inp) {
+    const i = getInput("comboTier");
+    if (i) {
       try {
-        inp.value = Number(comboTier) || 0;
-      } catch {}
+        (i as any).value = Number(comboTier) || 0;
+      } catch { }
     }
   }, [comboTier, rive]);
 
-  // ==== 結果画面マウント時に必ず一度発火（Inputs を待ってから） ====
+  // --- 結果画面：Inputs が現れてから、自然なタイミングで 1〜数回反応 ---
   useEffect(() => {
     let canceled = false;
     (async () => {
       if (!rive || !trigger) return;
-      // Inputsが現れるまで待つ
-      const ok = await waitForInputs(4000);
-      console.log("[CRAB ready?]", ok, {
+      const ready = await waitForInputs();
+      console.log("[CRAB ready?]", ready, {
         hasOnCorrect: !!getInput("onCorrect"),
         hasOnWrong: !!getInput("onWrong"),
       });
       if (canceled) return;
-      fire(trigger);
+
+      // 正答率の強度（comboTier）に合わせて回数やテンポを変える
+      if (trigger === "correct") {
+        // tier 0: 1回 / tier 1: 2回 / tier 2+: 3回、ちょい速め
+        const rep = comboTier >= 2 ? 3 : comboTier >= 1 ? 2 : 1;
+        const gap = comboTier >= 2 ? 580 : 650;
+        scheduleReaction("correct", { firstDelay: 520, repeats: rep, gap });
+      } else {
+        // wrong は 1回だけ、少し溜めてから
+        scheduleReaction("wrong", { firstDelay: 560, repeats: 1 });
+      }
     })();
     return () => {
       canceled = true;
     };
-    // triggerKey を依存に含める：画面を開き直したとき毎回反応
-  }, [rive, trigger, triggerKey]);
+  }, [rive, trigger, triggerKey, comboTier]);
 
-  // デバッグ：Input名のログ（ロード後に一度出る）
+  // デバッグ：ロード後に一度入力名を表示
   useEffect(() => {
     if (!rive) return;
     try {
       const ins = rive.stateMachineInputs("CrabMachine") || [];
       console.log("[RIVE] inputs:", ins.map((i: any) => i.name));
-    } catch {}
+    } catch { }
   }, [rive]);
 
-  // コンソール操作用（あなたの手動確認用）
+  // コンソールから手動確認
   useEffect(() => {
     (window as any).crab = {
-      correct: () => fire("correct"),
-      wrong: () => fire("wrong"),
+      correct: () => fireOnce("correct"),
+      wrong: () => fireOnce("wrong"),
       walk: (v: boolean) => {
         const i = getInput("isWalking");
-        if (i) i.value = v;
+        if (i) (i as any).value = v;
       },
       tier: (v: number) => {
         const i = getInput("comboTier");
-        if (i) i.value = v;
+        if (i) (i as any).value = v;
       },
     };
   }, [rive]);
@@ -178,9 +190,6 @@ export default function Crab({
   return (
     <div className="mx-auto w-full max-w-[340px]">
       <RiveComponent className="w-full h-[240px] border border-slate-600 rounded-md bg-slate-900/40 select-none pointer-events-none" />
-      <div className="mt-1 text-xs text-slate-400 text-center">
-        {rive ? "Rive OK" : "Loading..."}
-      </div>
     </div>
   );
 }
