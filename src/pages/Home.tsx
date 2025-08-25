@@ -5,7 +5,8 @@ export default function Home() {
     <div className="grid gap-6">
       <h1 className="text-3xl font-bold">古典単語アプリ（体験版）</h1>
       <p className="text-slate-300">学び方で2つのモードを用意しました。どちらからでも始められます。</p>
-
+      <p className="bg-primary-50 text-primary-700 shadow-card rounded-xl p-3
+">test</p>
       <div className="grid md:grid-cols-2 gap-5">
         <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
           <h2 className="font-semibold mb-2">① 表情でネガ/ポジ</h2>
